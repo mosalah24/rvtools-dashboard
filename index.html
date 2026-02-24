@@ -1,0 +1,1276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RVTools Analyser + Recommendations</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d0f14;
+    --surface: #13161e;
+    --surface2: #1a1e28;
+    --border: #252a38;
+    --accent: #00d4aa;
+    --accent2: #7c6af7;
+    --warn: #f59e0b;
+    --danger: #ef4444;
+    --ok: #22c55e;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --mono: 'JetBrains Mono', monospace;
+    --sans: 'Syne', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); min-height: 100vh; }
+
+  /* LAYOUT */
+  .app { display: flex; height: 100vh; overflow: hidden; }
+  .sidebar {
+    width: 220px; min-width: 220px; background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; padding: 0;
+    overflow-y: auto;
+  }
+  .logo {
+    padding: 20px 16px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .logo-icon {
+    width: 36px; height: 36px; background: var(--accent);
+    border-radius: 8px; display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 14px; color: #000; flex-shrink: 0;
+  }
+  .logo-text { font-size: 13px; font-weight: 600; line-height: 1.3; }
+  .logo-sub { font-size: 10px; color: var(--muted); font-family: var(--mono); }
+
+  .nav-section { padding: 12px 0 4px; }
+  .nav-label { font-size: 9px; font-weight: 700; color: var(--muted); letter-spacing: .12em; text-transform: uppercase; padding: 0 16px 6px; }
+  .nav-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 16px; cursor: pointer; font-size: 13px; font-weight: 600;
+    color: var(--muted); transition: all .15s; border-left: 3px solid transparent;
+    user-select: none;
+  }
+  .nav-item:hover { color: var(--text); background: var(--surface2); }
+  .nav-item.active { color: var(--accent); border-left-color: var(--accent); background: rgba(0,212,170,.07); }
+  .nav-item .icon { font-size: 15px; width: 18px; text-align: center; }
+
+  .main { flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
+
+  /* TOPBAR */
+  .topbar {
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 12px 24px; display: flex; align-items: center; gap: 12px; flex-shrink: 0;
+  }
+  .topbar-title { font-size: 18px; font-weight: 800; flex: 1; }
+  .btn {
+    padding: 7px 14px; border-radius: 7px; font-size: 12px; font-weight: 700;
+    cursor: pointer; border: none; font-family: var(--sans); transition: all .15s;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .btn-primary { background: var(--accent); color: #000; }
+  .btn-primary:hover { opacity: .85; }
+  .btn-ghost { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* CONTENT */
+  .content { padding: 24px; flex: 1; }
+  .tab { display: none; }
+  .tab.active { display: block; }
+
+  /* DROP ZONE */
+  .drop-zone {
+    border: 2px dashed var(--border); border-radius: 12px;
+    padding: 48px 24px; text-align: center; cursor: pointer;
+    transition: all .2s; margin-bottom: 24px;
+  }
+  .drop-zone:hover, .drop-zone.dragging { border-color: var(--accent); background: rgba(0,212,170,.04); }
+  .drop-icon { font-size: 36px; margin-bottom: 12px; }
+  .drop-title { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
+  .drop-sub { font-size: 12px; color: var(--muted); font-family: var(--mono); }
+  #fileInput { display: none; }
+
+  /* STAT CARDS */
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; margin-bottom: 24px; }
+  .stat-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px;
+  }
+  .stat-label { font-size: 10px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 8px; }
+  .stat-value { font-size: 26px; font-weight: 800; font-family: var(--mono); line-height: 1; }
+  .stat-sub { font-size: 11px; color: var(--muted); margin-top: 4px; font-family: var(--mono); }
+  .stat-accent { color: var(--accent); }
+  .stat-warn { color: var(--warn); }
+  .stat-danger { color: var(--danger); }
+
+  /* OVERCOMMIT CARDS */
+  .overcommit-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 24px; }
+  .oc-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px; text-align: center;
+  }
+  .oc-label { font-size: 10px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 6px; }
+  .oc-value { font-size: 28px; font-weight: 800; font-family: var(--mono); }
+  .oc-sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+  /* TABLES */
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; margin-bottom: 16px; overflow: hidden;
+  }
+  .card-header {
+    padding: 12px 16px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .card-title { font-size: 13px; font-weight: 700; }
+  .card-count { font-size: 11px; color: var(--muted); font-family: var(--mono); margin-left: auto; }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; font-family: var(--mono); }
+  th { padding: 8px 12px; text-align: left; font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  td { padding: 7px 12px; border-bottom: 1px solid rgba(255,255,255,.03); white-space: nowrap; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,.02); }
+
+  /* BADGES */
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 700; font-family: var(--sans);
+  }
+  .badge-on { background: rgba(34,197,94,.15); color: var(--ok); }
+  .badge-off { background: rgba(100,116,139,.15); color: var(--muted); }
+  .badge-suspended { background: rgba(245,158,11,.15); color: var(--warn); }
+  .badge-warn { background: rgba(245,158,11,.15); color: var(--warn); }
+  .badge-danger { background: rgba(239,68,68,.15); color: var(--danger); }
+  .badge-ok { background: rgba(34,197,94,.15); color: var(--ok); }
+  .badge-info { background: rgba(124,106,247,.15); color: var(--accent2); }
+
+  /* CHARTS */
+  .charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .chart-title { font-size: 12px; font-weight: 700; margin-bottom: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+  canvas { max-height: 220px; }
+
+  /* RECOMMENDATIONS */
+  .rec-summary {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px;
+  }
+  .rec-stat {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px; display: flex; align-items: center; gap: 12px;
+  }
+  .rec-stat-icon { font-size: 22px; }
+  .rec-stat-num { font-size: 22px; font-weight: 800; font-family: var(--mono); }
+  .rec-stat-label { font-size: 11px; color: var(--muted); }
+
+  .rec-filter-bar { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; align-items: center; }
+  .filter-btn {
+    padding: 5px 12px; border-radius: 20px; font-size: 11px; font-weight: 700;
+    cursor: pointer; border: 1px solid var(--border); background: var(--surface);
+    color: var(--muted); transition: all .15s; font-family: var(--sans);
+  }
+  .filter-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(0,212,170,.07); }
+  .filter-btn.f-warn.active { border-color: var(--warn); color: var(--warn); background: rgba(245,158,11,.07); }
+  .filter-btn.f-danger.active { border-color: var(--danger); color: var(--danger); background: rgba(239,68,68,.07); }
+
+  .rec-explanation {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 16px; margin-bottom: 16px;
+    font-size: 12px; color: var(--muted); line-height: 1.6;
+  }
+  .rec-explanation strong { color: var(--text); }
+
+  .priority-high { color: var(--danger); }
+  .priority-med { color: var(--warn); }
+  .priority-low { color: var(--accent); }
+
+  .savings-chip {
+    display: inline-block; background: rgba(0,212,170,.1);
+    color: var(--accent); padding: 2px 8px; border-radius: 4px;
+    font-size: 10px; font-weight: 700;
+  }
+
+  /* SEARCH */
+  .search-input {
+    background: var(--surface2); border: 1px solid var(--border); border-radius: 7px;
+    padding: 6px 12px; font-size: 12px; color: var(--text); font-family: var(--mono);
+    outline: none; width: 220px;
+  }
+  .search-input:focus { border-color: var(--accent); }
+  .search-input::placeholder { color: var(--muted); }
+
+  /* EMPTY */
+  .empty { text-align: center; padding: 40px; color: var(--muted); font-size: 13px; }
+  .empty-icon { font-size: 32px; margin-bottom: 10px; }
+
+  /* GRID 2 col */
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+  /* responsive */
+  @media (max-width: 900px) {
+    .sidebar { width: 56px; min-width: 56px; }
+    .nav-label, .nav-item span:not(.icon), .logo-text { display: none; }
+    .overcommit-grid { grid-template-columns: 1fr; }
+    .charts-row { grid-template-columns: 1fr; }
+    .rec-summary { grid-template-columns: 1fr 1fr; }
+    .grid2 { grid-template-columns: 1fr; }
+  }
+
+  .tag-new {
+    font-size: 9px; padding: 1px 6px; border-radius: 10px;
+    background: rgba(124,106,247,.25); color: var(--accent2); font-weight: 700; margin-left: 4px;
+  }
+
+  .progress-bar-wrap { background: var(--surface2); border-radius: 4px; height: 6px; width: 80px; display: inline-block; vertical-align: middle; }
+  .progress-bar-fill { height: 100%; border-radius: 4px; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="logo">
+      <div class="logo-icon">RV</div>
+      <div>
+        <div class="logo-text">RVTools Dash</div>
+        <div class="logo-sub">Browser Only</div>
+      </div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-label">Core</div>
+      <div class="nav-item active" data-tab="dashboard"><span class="icon">⬛</span><span>Dashboard</span></div>
+      <div class="nav-item" data-tab="clusters"><span class="icon">🔲</span><span>Clusters</span></div>
+      <div class="nav-item" data-tab="hosts"><span class="icon">🖥</span><span>ESXi Hosts</span></div>
+      <div class="nav-item" data-tab="inventory"><span class="icon">📋</span><span>VM Inventory</span></div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-label">Analytics</div>
+      <div class="nav-item" data-tab="recommendations"><span class="icon">💡</span><span>Recommendations <span class="tag-new">NEW</span></span></div>
+      <div class="nav-item" data-tab="storage"><span class="icon">💾</span><span>Storage</span></div>
+      <div class="nav-item" data-tab="eol"><span class="icon">⚠️</span><span>End of Support</span></div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-title" id="tabTitle">Dashboard</div>
+      <label for="fileInput" class="btn btn-primary" style="cursor:pointer">＋ Load Files</label>
+      <button class="btn btn-ghost" onclick="resetData()">↺ Reset</button>
+      <input type="file" id="fileInput" accept=".xlsx,.csv" multiple style="display:none">
+    </div>
+
+    <div class="content">
+
+      <!-- DASHBOARD TAB -->
+      <div class="tab active" id="tab-dashboard">
+        <label for="fileInput" class="drop-zone" id="dropZone" style="display:block;cursor:pointer">
+          <div class="drop-icon">📂</div>
+          <div class="drop-title">Drop RVTools exports here or click to browse</div>
+          <div class="drop-sub">Supports .xlsx and .csv · Processed entirely in your browser</div>
+        </label>
+
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-label">Active VMs</div>
+            <div class="stat-value stat-accent" id="s-activeVMs">0</div>
+            <div class="stat-sub" id="s-totalVMs">0 total</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">ESXi Hosts</div>
+            <div class="stat-value" id="s-hosts">0</div>
+            <div class="stat-sub">physical servers</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Total vCPUs</div>
+            <div class="stat-value" id="s-vcpus">0</div>
+            <div class="stat-sub" id="s-pcores">0 physical cores</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Physical RAM</div>
+            <div class="stat-value" id="s-pram">0</div>
+            <div class="stat-sub">host total</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">vRAM Allocated</div>
+            <div class="stat-value" id="s-vram">0</div>
+            <div class="stat-sub">active VMs</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Provisioned Storage</div>
+            <div class="stat-value" id="s-storage">0</div>
+            <div class="stat-sub" id="s-storageCap">— capacity</div>
+          </div>
+        </div>
+
+        <div class="overcommit-grid">
+          <div class="oc-card">
+            <div class="oc-label">Core : vCPU</div>
+            <div class="oc-value" id="oc-ratio">—</div>
+            <div class="oc-sub">vCPU per physical core</div>
+          </div>
+          <div class="oc-card">
+            <div class="oc-label">vRAM : pRAM</div>
+            <div class="oc-value" id="oc-mem">—</div>
+            <div class="oc-sub">memory overcommit</div>
+          </div>
+          <div class="oc-card">
+            <div class="oc-label">VM Density</div>
+            <div class="oc-value" id="oc-density">—</div>
+            <div class="oc-sub">VMs per ESXi host</div>
+          </div>
+        </div>
+
+        <div class="charts-row">
+          <div class="chart-card">
+            <div class="chart-title">VM Power State</div>
+            <canvas id="chartPower"></canvas>
+          </div>
+          <div class="chart-card">
+            <div class="chart-title">OS Distribution</div>
+            <canvas id="chartOS"></canvas>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <span>🔥</span>
+            <span class="card-title">Top 10 Heavy Hitters (vCPU)</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>VM Name</th><th>vCPU</th><th>vRAM (GiB)</th><th>Prov. (GiB)</th><th>Cluster</th><th>Power</th></tr></thead>
+              <tbody id="t-heavyhitters"><tr><td colspan="6" class="empty">No data loaded</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- CLUSTERS TAB -->
+      <div class="tab" id="tab-clusters">
+        <div class="card">
+          <div class="card-header"><span>🔲</span><span class="card-title">Cluster Summary</span><span class="card-count" id="cc-count"></span></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Cluster</th><th>VMs</th><th>vCPUs</th><th>vRAM (GiB)</th><th>pCores</th><th>vCPU/Core</th></tr></thead>
+              <tbody id="t-clusters"><tr><td colspan="6" class="empty">No data loaded</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- HOSTS TAB -->
+      <div class="tab" id="tab-hosts">
+        <div class="card">
+          <div class="card-header"><span>🖥</span><span class="card-title">ESXi Host Inventory</span><span class="card-count" id="hc-count"></span></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Host</th><th>Cluster</th><th>Sockets</th><th>Cores</th><th>RAM (GiB)</th><th>vCPUs Placed</th><th>VMs</th><th>ESXi Version</th></tr></thead>
+              <tbody id="t-hosts"><tr><td colspan="8" class="empty">No data loaded</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- VM INVENTORY TAB -->
+      <div class="tab" id="tab-inventory">
+        <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;">
+          <input class="search-input" id="vmSearch" placeholder="Search VMs..." oninput="filterVMs()">
+          <button class="filter-btn active" data-power="all" onclick="setPowerFilter(this)">All</button>
+          <button class="filter-btn" data-power="poweredOn" onclick="setPowerFilter(this)">Powered On</button>
+          <button class="filter-btn" data-power="poweredOff" onclick="setPowerFilter(this)">Powered Off</button>
+          <button class="filter-btn" data-power="suspended" onclick="setPowerFilter(this)">Suspended</button>
+          <span style="margin-left:auto;font-size:11px;color:var(--muted);font-family:var(--mono)" id="vm-count-label">0 VMs</span>
+        </div>
+        <div class="card">
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>VM Name</th><th>Power</th><th>vCPU</th><th>vRAM (GiB)</th><th>Prov. (GiB)</th><th>Cluster</th><th>Host</th><th>OS</th><th>HW Ver</th></tr></thead>
+              <tbody id="t-inventory"><tr><td colspan="9" class="empty">No data loaded</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- RECOMMENDATIONS TAB -->
+      <div class="tab" id="tab-recommendations">
+        <div class="rec-explanation">
+          <strong>How recommendations work:</strong> Since only allocation data is available (no live utilization metrics), recommendations are based on industry best-practice thresholds.
+          VMs with <strong>&gt;8 vCPUs</strong> are flagged for review (NUMA boundary risk). Powered-off VMs waste allocated resources.
+          High vCPU/Core ratio (&gt;8:1) and vRAM/pRAM &gt;1:1 indicate overcommit risk at cluster level.
+          Right-sizing suggestions use VMware recommended minimums per OS type.
+        </div>
+
+        <div class="rec-summary">
+          <div class="rec-stat">
+            <div class="rec-stat-icon">🔴</div>
+            <div>
+              <div class="rec-stat-num" id="r-highvcpu">0</div>
+              <div class="rec-stat-label">High vCPU VMs (&gt;8)</div>
+            </div>
+          </div>
+          <div class="rec-stat">
+            <div class="rec-stat-icon">💤</div>
+            <div>
+              <div class="rec-stat-num" id="r-poweredoff">0</div>
+              <div class="rec-stat-label">Powered-Off VMs</div>
+            </div>
+          </div>
+          <div class="rec-stat">
+            <div class="rec-stat-icon">⚠️</div>
+            <div>
+              <div class="rec-stat-num" id="r-overcommit">0</div>
+              <div class="rec-stat-label">Overcommit Risk Clusters</div>
+            </div>
+          </div>
+          <div class="rec-stat">
+            <div class="rec-stat-icon">💾</div>
+            <div>
+              <div class="rec-stat-num" id="r-vramwaste">0 GiB</div>
+              <div class="rec-stat-label">vRAM in Powered-Off VMs</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- CLUSTER OVERCOMMIT -->
+        <div class="card">
+          <div class="card-header"><span>⚠️</span><span class="card-title">Cluster Overcommit Risk</span></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Cluster</th><th>vCPU/Core Ratio</th><th>CPU Risk</th><th>vRAM/pRAM Ratio</th><th>Mem Risk</th><th>VMs</th><th>Recommendation</th></tr></thead>
+              <tbody id="t-overcommit"><tr><td colspan="7" class="empty">No data loaded</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- HIGH vCPU VMs -->
+        <div class="card">
+          <div class="card-header"><span>🔴</span><span class="card-title">VMs with Excessive vCPUs (&gt;8)</span><span class="card-count" id="r-highvcpu-count"></span></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>VM Name</th><th>vCPU</th><th>vRAM (GiB)</th><th>Cluster</th><th>Power</th><th>Suggested vCPU</th><th>Priority</th><th>Reason</th></tr></thead>
+              <tbody id="t-highvcpu"><tr><td colspan="8" class="empty">No data loaded</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- POWERED OFF -->
+        <div class="card">
+          <div class="card-header"><span>💤</span><span class="card-title">Powered-Off VMs — Resource Waste</span><span class="card-count" id="r-poff-count"></span></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>VM Name</th><th>vCPU</th><th>vRAM (GiB)</th><th>Prov. (GiB)</th><th>Cluster</th><th>OS</th><th>Action</th></tr></thead>
+              <tbody id="t-poweredoff"><tr><td colspan="7" class="empty">No data loaded</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- RIGHT SIZING -->
+        <div class="card">
+          <div class="card-header"><span>⚖️</span><span class="card-title">Right-Sizing Recommendations (Allocation-Based)</span><span class="card-count" id="r-rs-count"></span></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>VM Name</th><th>Current vCPU</th><th>Suggested vCPU</th><th>Current vRAM</th><th>Suggested vRAM</th><th>OS</th><th>Priority</th><th>Notes</th></tr></thead>
+              <tbody id="t-rightsizing"><tr><td colspan="8" class="empty">No data loaded</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- STORAGE TAB -->
+      <div class="tab" id="tab-storage">
+        <div class="card">
+          <div class="card-header"><span>💾</span><span class="card-title">VM Storage Summary (Top 30 by Provisioned)</span></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>VM Name</th><th>Prov. (GiB)</th><th>In Use (GiB)</th><th>Cluster</th><th>Power</th></tr></thead>
+              <tbody id="t-storage"><tr><td colspan="5" class="empty">No data loaded</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- EOL TAB -->
+      <div class="tab" id="tab-eol">
+        <div class="card">
+          <div class="card-header"><span>📅</span><span class="card-title">OS End-of-Life Status</span></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>OS Family</th><th>VMs</th><th>Status</th><th>Notes</th></tr></thead>
+              <tbody id="t-eol"><tr><td colspan="4" class="empty">No data loaded</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /content -->
+  </div><!-- /main -->
+</div>
+
+<script>
+// ============================================================
+// STATE
+// ============================================================
+let state = {
+  vms: [],         // from vInfo sheet
+  hosts: [],       // from vHost sheet
+  disks: [],       // from vDisk/vPartition
+  powerFilter: 'all',
+  charts: {}
+};
+
+// ============================================================
+// NAV
+// ============================================================
+const tabTitles = {
+  dashboard: 'Dashboard', clusters: 'Clusters', hosts: 'ESXi Hosts',
+  inventory: 'VM Inventory', recommendations: '💡 CPU & Memory Recommendations',
+  storage: 'Storage', eol: 'End of Support'
+};
+document.querySelectorAll('.nav-item').forEach(el => {
+  el.addEventListener('click', () => {
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+    const tab = el.dataset.tab;
+    document.getElementById('tab-' + tab).classList.add('active');
+    document.getElementById('tabTitle').textContent = tabTitles[tab] || tab;
+  });
+});
+
+// ============================================================
+// FILE LOADING
+// ============================================================
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragging'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragging'));
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('dragging'); handleFiles(e.dataTransfer.files); });
+fileInput.addEventListener('change', e => handleFiles(e.target.files));
+
+// Robust CSV parser - correctly handles quoted fields containing commas
+function parseCSVText(text) {
+  // Normalize line endings
+  text = text.replace(/
+/g, '
+').replace(/
+/g, '
+');
+  // Strip BOM if present
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+
+  function parseLine(line) {
+    const fields = [];
+    let cur = '', inQuote = false, i = 0;
+    while (i < line.length) {
+      const ch = line[i];
+      if (inQuote) {
+        if (ch === '"') {
+          // Check for escaped quote ""
+          if (i + 1 < line.length && line[i+1] === '"') { cur += '"'; i += 2; continue; }
+          inQuote = false;
+        } else {
+          cur += ch;
+        }
+      } else {
+        if (ch === '"') { inQuote = true; }
+        else if (ch === ',') { fields.push(cur.trim()); cur = ''; }
+        else { cur += ch; }
+      }
+      i++;
+    }
+    fields.push(cur.trim());
+    return fields;
+  }
+
+  const lines = text.split('
+');
+  // Find first non-empty line as header
+  let headerIdx = 0;
+  while (headerIdx < lines.length && lines[headerIdx].trim() === '') headerIdx++;
+  if (headerIdx >= lines.length) return [];
+
+  const headers = parseLine(lines[headerIdx]);
+  const rows = [];
+  for (let i = headerIdx + 1; i < lines.length; i++) {
+    if (!lines[i].trim()) continue;
+    const vals = parseLine(lines[i]);
+    const obj = {};
+    headers.forEach((h, idx) => { obj[h] = vals[idx] !== undefined ? vals[idx] : ''; });
+    rows.push(obj);
+  }
+  return rows;
+}
+
+// Route raw rows (from CSV) to the right state bucket
+function parseRawRows(rows, fname) {
+  if (!rows.length) return;
+  const keys = Object.keys(rows[0]).join(' ').toLowerCase();
+  const isHostSheet = (keys.includes('socket') || keys.includes('numcpu') || keys.includes('cores')) && !keys.includes('vmname') && !keys.includes('vm name') && !keys.includes('vcpu');
+  const isDiskSheet = keys.includes('disk') || (keys.includes('capacity') && !keys.includes('vcpu'));
+
+  if (isHostSheet) {
+    state.hosts = [...state.hosts, ...parseHosts(rows)];
+  } else if (isDiskSheet) {
+    state.disks = [...state.disks, ...rows];
+  } else {
+    state.vms = [...state.vms, ...parseVMs(rows)];
+  }
+
+  // Dedupe VMs
+  const seen = new Set();
+  state.vms = state.vms.filter(v => {
+    const key = v.name + '|' + v.host;
+    if (seen.has(key)) return false;
+    seen.add(key); return true;
+  });
+
+  renderAll();
+}
+
+function handleFiles(files) {
+  Array.from(files).forEach(f => {
+    const isCSV = f.name.toLowerCase().endsWith('.csv');
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        if (isCSV) {
+          const rows = parseCSVText(e.target.result);
+          if (!rows.length) { alert('CSV appears empty: ' + f.name); return; }
+          parseRawRows(rows, f.name);
+        } else {
+          const wb = XLSX.read(e.target.result, { type: 'array' });
+          parseWorkbook(wb, f.name);
+        }
+      } catch(err) {
+        alert('Error reading file: ' + err.message);
+      }
+    };
+    if (isCSV) {
+      reader.readAsText(f);
+    } else {
+      reader.readAsArrayBuffer(f);
+    }
+  });
+}
+
+function parseWorkbook(wb, fname) {
+  const sheetNames = wb.SheetNames;
+  const fnLower = fname.toLowerCase();
+
+  // For CSV files or single-sheet workbooks, detect by column content
+  if (sheetNames.length === 1) {
+    const raw = XLSX.utils.sheet_to_json(wb.Sheets[sheetNames[0]], { defval: '' });
+    if (!raw.length) return;
+    const firstRow = raw[0];
+    const keys = Object.keys(firstRow).join(' ').toLowerCase();
+    if (keys.includes('host') && (keys.includes('socket') || keys.includes('numcpu') || keys.includes('cores')) && !keys.includes('vm name') && !keys.includes('vmname')) {
+      // Looks like a host sheet
+      state.hosts = [...state.hosts, ...parseHosts(raw)];
+    } else if (detectVMSheet(firstRow)) {
+      state.vms = [...state.vms, ...parseVMs(raw)];
+    } else if (keys.includes('disk') || keys.includes('partition') || keys.includes('capacity')) {
+      state.disks = [...state.disks, ...raw];
+    } else {
+      // Default: try as VM sheet
+      state.vms = [...state.vms, ...parseVMs(raw)];
+    }
+  } else {
+    // Multi-sheet XLSX: match by sheet name
+    const vInfoSheet = sheetNames.find(s => /vinfo|vm.?info|^vms$/i.test(s));
+    const vHostSheet = sheetNames.find(s => /vhost|esxi.?host|host.?info/i.test(s));
+    const vDiskSheet = sheetNames.find(s => /vdisk|disk|partition/i.test(s));
+
+    if (vInfoSheet) {
+      const raw = XLSX.utils.sheet_to_json(wb.Sheets[vInfoSheet], { defval: '' });
+      state.vms = [...state.vms, ...parseVMs(raw)];
+    }
+    if (vHostSheet) {
+      const raw = XLSX.utils.sheet_to_json(wb.Sheets[vHostSheet], { defval: '' });
+      state.hosts = [...state.hosts, ...parseHosts(raw)];
+    }
+    if (vDiskSheet) {
+      const raw = XLSX.utils.sheet_to_json(wb.Sheets[vDiskSheet], { defval: '' });
+      state.disks = [...state.disks, ...raw];
+    }
+    // If no named sheets matched, try all sheets
+    if (!vInfoSheet && !vHostSheet) {
+      sheetNames.forEach(name => {
+        const raw = XLSX.utils.sheet_to_json(wb.Sheets[name], { defval: '' });
+        if (!raw.length) return;
+        const keys = Object.keys(raw[0]).join(' ').toLowerCase();
+        if (detectVMSheet(raw[0])) state.vms = [...state.vms, ...parseVMs(raw)];
+        else if (keys.includes('socket') || (keys.includes('host') && keys.includes('cores'))) state.hosts = [...state.hosts, ...parseHosts(raw)];
+      });
+    }
+  }
+
+  // Dedupe VMs by name+host combo
+  const seen = new Set();
+  state.vms = state.vms.filter(v => {
+    const key = v.name + '|' + v.host;
+    if (seen.has(key)) return false;
+    seen.add(key); return true;
+  });
+
+  renderAll();
+}
+
+function detectVMSheet(row) {
+  const keys = Object.keys(row).join(' ').toLowerCase();
+  return keys.includes('vcpu') || keys.includes('vram') || keys.includes('powerstate') || keys.includes('vm name');
+}
+
+function col(row, ...keys) {
+  for (const k of keys) {
+    const exact = Object.keys(row).find(rk => rk.toLowerCase() === k.toLowerCase());
+    if (exact !== undefined && row[exact] !== '') return row[exact];
+  }
+  for (const k of keys) {
+    const partial = Object.keys(row).find(rk => rk.toLowerCase().includes(k.toLowerCase()));
+    if (partial !== undefined && row[partial] !== '') return row[partial];
+  }
+  return '';
+}
+
+function parseVMs(raw) {
+  return raw.map(r => {
+    const name    = r['VM'] || col(r,'vm name','vmname') || '';
+    const power   = r['Powerstate'] || col(r,'powerstate','power state') || '';
+    const vcpu    = parseInt(r['CPUs'] || col(r,'cpus','# cpu')) || 0;
+    const memMB   = parseFloat(r['Memory'] || col(r,'memory')) || 0;
+    const provMiB = parseFloat(r['Provisioned MiB'] || col(r,'provisioned mib')) || 0;
+    const inUseMiB= parseFloat(r['In Use MiB'] || col(r,'in use mib')) || 0;
+    const cluster = r['Cluster'] || col(r,'cluster') || '—';
+    const host    = r['Host'] || col(r,'host') || '—';
+    const os      = r['OS according to the VMware Tools'] || r['OS according to the configuration file'] || col(r,'os according','guestos') || '—';
+    const hwver   = r['HW version'] || col(r,'hw version','hwversion') || '—';
+    const dc      = r['Datacenter'] || col(r,'datacenter') || '—';
+    const template= (r['Template'] || '').toString().toLowerCase() === 'true';
+    if (!name || template) return null;
+    return { name, power, vcpu, vramMB: memMB, provGiB: provMiB/1024, inUseGiB: inUseMiB/1024, cluster, host, os, hwver, dc };
+  }).filter(Boolean);
+}
+
+function parseHosts(raw) {
+  return raw.map(r => {
+    const name    = r['Host'] || col(r,'host') || '';
+    const cluster = r['Cluster'] || col(r,'cluster') || '—';
+    const dc      = r['Datacenter'] || col(r,'datacenter') || '—';
+    const sockets = parseInt(r['# CPU'] || col(r,'# cpu')) || 0;
+    const cores   = parseInt(r['# Cores'] || col(r,'# cores')) || 0;
+    const ramMiB  = parseFloat(r['# Memory'] || col(r,'# memory')) || 0;
+    const vcpus   = parseInt(r['# vCPUs'] || col(r,'# vcpus')) || 0;
+    const vramMiB = parseFloat(r['vRAM'] || col(r,'vram')) || 0;
+    const vms     = parseInt(r['# VMs'] || col(r,'# vms')) || 0;
+    const esxiVer = r['ESX Version'] || col(r,'esx version','esxi version') || '—';
+    if (!name) return null;
+    return { name, cluster, dc, sockets, cores, ramMiB, vcpus, vramMiB, vms, esxiVer };
+  }).filter(Boolean);
+}
+
+function resetData() {
+  state = { vms: [], hosts: [], disks: [], powerFilter: 'all', charts: {} };
+  fileInput.value = '';
+  renderAll();
+}
+
+// ============================================================
+// RENDER ALL
+// ============================================================
+function renderAll() {
+  renderDashboard();
+  renderClusters();
+  renderHosts();
+  filterVMs();       // renders VM Inventory tab
+  renderRecommendations();
+  renderStorage();
+  renderEOL();
+}
+
+// ============================================================
+// HELPERS
+// ============================================================
+function fmtGiB(mb) { return (mb / 1024).toFixed(1); }
+function fmtTiB(gb) { return (gb / 1024).toFixed(2); }
+function powerBadge(p) {
+  const norm = (p || '').toLowerCase();
+  if (norm.includes('on')) return '<span class="badge badge-on">● On</span>';
+  if (norm.includes('off')) return '<span class="badge badge-off">◯ Off</span>';
+  if (norm.includes('suspend')) return '<span class="badge badge-suspended">⏸ Suspended</span>';
+  return `<span class="badge badge-info">${p}</span>`;
+}
+function isPoweredOn(vm) { return (vm.power||'').toLowerCase().includes('on'); }
+function isPoweredOff(vm) { return (vm.power||'').toLowerCase().includes('off'); }
+
+function clusterMap() {
+  const m = {};
+  state.vms.forEach(vm => {
+    if (!m[vm.cluster]) m[vm.cluster] = { vms: [], vcpus: 0, vramMB: 0 };
+    m[vm.cluster].vms.push(vm);
+    if (isPoweredOn(vm)) {
+      m[vm.cluster].vcpus += vm.vcpu;
+      m[vm.cluster].vramMB += vm.vramMB;
+    }
+  });
+  return m;
+}
+
+function hostMap() {
+  const m = {};
+  state.hosts.forEach(h => { m[h.name] = h; });
+  return m;
+}
+
+// ============================================================
+// DASHBOARD
+// ============================================================
+function renderDashboard() {
+  const vms = state.vms;
+  const hosts = state.hosts;
+  const activeVMs = vms.filter(isPoweredOn);
+  const totalVCPUs = activeVMs.reduce((s,v) => s + v.vcpu, 0);
+  const totalVRAM_MB = activeVMs.reduce((s,v) => s + v.vramMB, 0);
+  const totalPRAM_GB = hosts.reduce((s,h) => s + h.ramMiB / 1024, 0); // MiB→GiB
+  const totalPCores = hosts.reduce((s,h) => s + h.cores, 0);
+  const totalProv = vms.reduce((s,v) => s + v.provGiB, 0);
+
+  setText('s-activeVMs', activeVMs.length);
+  setText('s-totalVMs', vms.length + ' total');
+  setText('s-hosts', hosts.length);
+  setText('s-vcpus', totalVCPUs);
+  setText('s-pcores', totalPCores + ' physical cores');
+  setText('s-pram', totalPRAM_GB > 0 ? totalPRAM_GB.toFixed(0) + ' GiB' : '—');
+  setText('s-vram', totalVRAM_MB > 0 ? fmtGiB(totalVRAM_MB) + ' GiB' : '—');
+  setText('s-storage', totalProv > 0 ? fmtTiB(totalProv) + ' TiB' : '—');
+
+  const cpuRatio = totalPCores > 0 ? (totalVCPUs / totalPCores).toFixed(1) + ' : 1' : '—';
+  const memRatio = totalPRAM_GB > 0 ? (totalVRAM_MB/1024 / totalPRAM_GB).toFixed(2) + ' : 1' : '—';
+  const density = hosts.length > 0 ? (activeVMs.length / hosts.length).toFixed(1) : '—';
+  setText('oc-ratio', cpuRatio);
+  setText('oc-mem', memRatio);
+  setText('oc-density', density);
+
+  // Heavy hitters
+  const top10 = [...activeVMs].sort((a,b) => b.vcpu - a.vcpu).slice(0, 10);
+  const hh = document.getElementById('t-heavyhitters');
+  hh.innerHTML = top10.length ? top10.map(vm => `
+    <tr>
+      <td style="color:var(--text);font-weight:600">${vm.name}</td>
+      <td style="color:var(--accent)">${vm.vcpu}</td>
+      <td>${(vm.vramMB/1024).toFixed(1)}</td>
+      <td>${vm.provGiB.toFixed(1)}</td>
+      <td style="color:var(--muted)">${vm.cluster}</td>
+      <td>${powerBadge(vm.power)}</td>
+    </tr>`).join('') : '<tr><td colspan="6" class="empty">No data</td></tr>';
+
+  // Charts
+  renderPowerChart(vms);
+  renderOSChart(vms);
+}
+
+function setText(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = val;
+}
+
+let chartInstances = {};
+function renderPowerChart(vms) {
+  const counts = { 'Powered On': 0, 'Powered Off': 0, 'Suspended': 0 };
+  vms.forEach(v => {
+    const p = (v.power||'').toLowerCase();
+    if (p.includes('on')) counts['Powered On']++;
+    else if (p.includes('off')) counts['Powered Off']++;
+    else if (p.includes('suspend')) counts['Suspended']++;
+    else counts['Powered Off']++;
+  });
+  const ctx = document.getElementById('chartPower').getContext('2d');
+  if (chartInstances.power) chartInstances.power.destroy();
+  chartInstances.power = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: Object.keys(counts),
+      datasets: [{ data: Object.values(counts), backgroundColor: ['#00d4aa','#374151','#f59e0b'], borderWidth: 0 }]
+    },
+    options: { plugins: { legend: { labels: { color: '#94a3b8', font: { size: 11 } } } }, cutout: '60%' }
+  });
+}
+
+function renderOSChart(vms) {
+  const osCounts = {};
+  vms.forEach(v => {
+    const os = detectOSFamily(v.os);
+    osCounts[os] = (osCounts[os] || 0) + 1;
+  });
+  const sorted = Object.entries(osCounts).sort((a,b) => b[1]-a[1]).slice(0, 8);
+  const ctx = document.getElementById('chartOS').getContext('2d');
+  if (chartInstances.os) chartInstances.os.destroy();
+  chartInstances.os = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: sorted.map(s => s[0]),
+      datasets: [{ data: sorted.map(s => s[1]), backgroundColor: '#7c6af7', borderRadius: 4, borderWidth: 0 }]
+    },
+    options: {
+      indexAxis: 'y',
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: '#64748b' }, grid: { color: '#1a1e28' } },
+        y: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { display: false } }
+      }
+    }
+  });
+}
+
+// ============================================================
+// CLUSTERS
+// ============================================================
+function renderClusters() {
+  const cm = clusterMap();
+  const hm = hostMap();
+  const clusters = Object.entries(cm).map(([name, data]) => {
+    const clusterHosts = state.hosts.filter(h => h.cluster === name);
+    const pCores = clusterHosts.reduce((s,h) => s + h.cores, 0);
+    return { name, vms: data.vms.length, vcpus: data.vcpus, vramGiB: data.vramMB/1024, pCores };
+  });
+  clusters.sort((a,b) => b.vms - a.vms);
+  setText('cc-count', clusters.length + ' clusters');
+  const tbody = document.getElementById('t-clusters');
+  tbody.innerHTML = clusters.length ? clusters.map(c => {
+    const ratio = c.pCores > 0 ? (c.vcpus / c.pCores).toFixed(1) : '—';
+    const ratioColor = parseFloat(ratio) > 8 ? 'var(--danger)' : parseFloat(ratio) > 4 ? 'var(--warn)' : 'var(--ok)';
+    return `<tr>
+      <td style="font-weight:700;color:var(--text)">${c.name}</td>
+      <td>${c.vms}</td>
+      <td style="color:var(--accent)">${c.vcpus}</td>
+      <td>${c.vramGiB.toFixed(1)}</td>
+      <td>${c.pCores}</td>
+      <td style="color:${ratioColor};font-weight:700">${ratio}</td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="6" class="empty">No data loaded</td></tr>';
+}
+
+// ============================================================
+// HOSTS
+// ============================================================
+function renderHosts() {
+  const hosts = [...state.hosts].sort((a,b) => b.cores - a.cores);
+  setText('hc-count', hosts.length + ' hosts');
+  const tbody = document.getElementById('t-hosts');
+  tbody.innerHTML = hosts.length ? hosts.map(h => `
+    <tr>
+      <td style="font-weight:600;color:var(--text)">${h.name}</td>
+      <td style="color:var(--muted)">${h.cluster}</td>
+      <td>${h.sockets || '—'}</td>
+      <td style="color:var(--accent)">${h.cores}</td>
+      <td>${h.ramMiB > 0 ? (h.ramMiB/1024).toFixed(0) : '—'}</td>
+      <td>${h.vcpus || '—'}</td>
+      <td>${h.vms || '—'}</td>
+      <td style="font-family:var(--mono);font-size:11px;color:var(--muted)">${h.esxiVer}</td>
+    </tr>`).join('') : '<tr><td colspan="8" class="empty">No data loaded</td></tr>';
+}
+
+// ============================================================
+// INVENTORY
+// ============================================================
+let vmPowerFilter = 'all';
+function setPowerFilter(btn) {
+  vmPowerFilter = btn.dataset.power;
+  document.querySelectorAll('[data-power]').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  filterVMs();
+}
+
+function filterVMs() {
+  const search = (document.getElementById('vmSearch').value || '').toLowerCase();
+  let vms = state.vms;
+  if (vmPowerFilter !== 'all') {
+    vms = vms.filter(v => {
+      const p = (v.power||'').toLowerCase();
+      if (vmPowerFilter === 'poweredOn') return p.includes('on');
+      if (vmPowerFilter === 'poweredOff') return p.includes('off');
+      if (vmPowerFilter === 'suspended') return p.includes('suspend');
+      return true;
+    });
+  }
+  if (search) vms = vms.filter(v => v.name.toLowerCase().includes(search) || v.cluster.toLowerCase().includes(search) || v.os.toLowerCase().includes(search));
+  setText('vm-count-label', vms.length + ' VMs');
+  const tbody = document.getElementById('t-inventory');
+  tbody.innerHTML = vms.length ? vms.map(vm => `
+    <tr>
+      <td style="font-weight:600;color:var(--text)">${vm.name}</td>
+      <td>${powerBadge(vm.power)}</td>
+      <td>${vm.vcpu}</td>
+      <td>${(vm.vramMB/1024).toFixed(1)}</td>
+      <td>${vm.provGiB.toFixed(1)}</td>
+      <td style="color:var(--muted)">${vm.cluster}</td>
+      <td style="color:var(--muted);font-size:11px">${vm.host}</td>
+      <td style="font-size:11px">${vm.os}</td>
+      <td style="color:var(--muted)">${vm.hwver}</td>
+    </tr>`).join('') : '<tr><td colspan="9" class="empty">No matching VMs</td></tr>';
+}
+
+// ============================================================
+// RECOMMENDATIONS
+// ============================================================
+function detectOSFamily(os) {
+  const o = (os||'').toLowerCase();
+  if (o.includes('windows server 2022')) return 'Windows Server 2022';
+  if (o.includes('windows server 2019')) return 'Windows Server 2019';
+  if (o.includes('windows server 2016')) return 'Windows Server 2016';
+  if (o.includes('windows server 2012')) return 'Windows Server 2012';
+  if (o.includes('windows server 2008')) return 'Windows Server 2008';
+  if (o.includes('windows 10') || o.includes('windows 11')) return 'Windows Desktop';
+  if (o.includes('windows')) return 'Windows';
+  if (o.includes('rhel') || o.includes('red hat')) return 'RHEL';
+  if (o.includes('centos')) return 'CentOS';
+  if (o.includes('ubuntu')) return 'Ubuntu';
+  if (o.includes('debian')) return 'Debian';
+  if (o.includes('suse') || o.includes('sles')) return 'SUSE';
+  if (o.includes('linux')) return 'Linux';
+  if (o.includes('esxi') || o.includes('vmware')) return 'ESXi/VMware';
+  if (!os || os === '—') return 'Unknown';
+  return 'Other';
+}
+
+const EOL_STATUS = {
+  'Windows Server 2022': { date: '2031-10-14', status: 'ok' },
+  'Windows Server 2019': { date: '2029-01-09', status: 'ok' },
+  'Windows Server 2016': { date: '2027-01-11', status: 'ok' },
+  'Windows Server 2012': { date: '2023-10-10', status: 'eol' },
+  'Windows Server 2008': { date: '2020-01-14', status: 'eol' },
+  'Windows Desktop': { date: '2025-10-14', status: 'warn' },
+  'Windows': { date: 'Unknown', status: 'unknown' },
+  'RHEL': { date: '2029-06-30', status: 'ok' },
+  'CentOS': { date: '2024-06-30', status: 'eol' },
+  'Ubuntu': { date: '2027-04-01', status: 'ok' },
+  'Debian': { date: '2026-06-30', status: 'ok' },
+  'SUSE': { date: '2028-12-31', status: 'ok' },
+  'Linux': { date: 'Unknown', status: 'unknown' },
+  'ESXi/VMware': { date: '2028-04-02', status: 'ok' },
+};
+
+// Right-sizing thresholds per OS
+function getRightSizeRec(vm) {
+  const os = detectOSFamily(vm.os);
+  const vcpu = vm.vcpu;
+  const vramGiB = vm.vramMB / 1024;
+  let suggestedVCPU = vcpu;
+  let suggestedRAMGiB = vramGiB;
+  let notes = [];
+  let priority = 'low';
+
+  // CPU recommendations
+  if (vcpu > 16) {
+    suggestedVCPU = 16;
+    notes.push('Reduce vCPUs to stay within NUMA node boundary');
+    priority = 'high';
+  } else if (vcpu > 8) {
+    suggestedVCPU = 8;
+    notes.push('High vCPU count may cause CPU scheduling overhead');
+    priority = 'medium';
+  } else if (vcpu > 4 && (os.includes('Desktop') || os === 'Unknown')) {
+    suggestedVCPU = 4;
+    notes.push('Desktop OS rarely benefits from >4 vCPUs');
+    priority = 'medium';
+  }
+
+  // RAM recommendations
+  if (vramGiB > 128) {
+    notes.push('Very high memory — validate if workload justifies this');
+    if (priority === 'low') priority = 'medium';
+  } else if (vramGiB > 64 && (os.includes('Desktop') || os === 'Unknown')) {
+    suggestedRAMGiB = 32;
+    notes.push('Reduce RAM for desktop/unknown OS workloads');
+    priority = 'medium';
+  }
+
+  // Only return if there's a meaningful recommendation
+  const cpuChanged = suggestedVCPU !== vcpu;
+  const ramChanged = Math.abs(suggestedRAMGiB - vramGiB) > 1;
+  if (!cpuChanged && !ramChanged) return null;
+
+  return {
+    suggestedVCPU, suggestedRAMGiB: Math.round(suggestedRAMGiB),
+    currentRAMGiB: vramGiB.toFixed(1),
+    notes: notes.join('; '),
+    priority,
+    os
+  };
+}
+
+function renderRecommendations() {
+  const vms = state.vms;
+  if (!vms.length) {
+    ['t-overcommit','t-highvcpu','t-poweredoff','t-rightsizing'].forEach(id => {
+      document.getElementById(id).innerHTML = '<tr><td colspan="10" class="empty"><div class="empty-icon">📂</div>Load RVTools files to see recommendations</td></tr>';
+    });
+    return;
+  }
+
+  const activeVMs = vms.filter(isPoweredOn);
+  const offVMs = vms.filter(isPoweredOff);
+  const highVCPU = vms.filter(v => v.vcpu > 8);
+  const offVRAM = offVMs.reduce((s,v) => s + v.vramMB/1024, 0);
+
+  setText('r-highvcpu', highVCPU.length);
+  setText('r-poweredoff', offVMs.length);
+  setText('r-vramwaste', offVRAM.toFixed(0) + ' GiB');
+
+  // Cluster overcommit
+  const cm = clusterMap();
+  let overcommitRisk = 0;
+  const ocRows = Object.entries(cm).map(([name, data]) => {
+    const clusterHosts = state.hosts.filter(h => h.cluster === name);
+    const pCores = clusterHosts.reduce((s,h) => s + h.cores, 0);
+    const pRAMGB = clusterHosts.reduce((s,h) => s + h.ramMiB/1024, 0);
+    const cpuRatio = pCores > 0 ? data.vcpus / pCores : null;
+    const memRatio = pRAMGB > 0 ? (data.vramMB/1024) / pRAMGB : null;
+    const cpuRisk = cpuRatio === null ? 'unknown' : cpuRatio > 8 ? 'high' : cpuRatio > 4 ? 'medium' : 'ok';
+    const memRisk = memRatio === null ? 'unknown' : memRatio > 1 ? 'high' : memRatio > 0.8 ? 'medium' : 'ok';
+    if (cpuRisk === 'high' || memRisk === 'high') overcommitRisk++;
+    const cpuBadge = riskBadge(cpuRisk, cpuRatio !== null ? cpuRatio.toFixed(1) + ':1' : '—');
+    const memBadge = riskBadge(memRisk, memRatio !== null ? memRatio.toFixed(2) + ':1' : '—');
+    let rec = [];
+    if (cpuRisk === 'high') rec.push('Consider adding ESXi hosts or reducing vCPU allocation');
+    if (memRisk === 'high') rec.push('Memory overcommit detected — add hosts or reduce vRAM');
+    if (cpuRisk === 'medium') rec.push('Monitor CPU scheduling carefully');
+    return `<tr>
+      <td style="font-weight:700;color:var(--text)">${name}</td>
+      <td style="font-family:var(--mono)">${cpuRatio !== null ? cpuRatio.toFixed(1) + ':1' : '—'}</td>
+      <td>${cpuBadge}</td>
+      <td style="font-family:var(--mono)">${memRatio !== null ? memRatio.toFixed(2) + ':1' : '—'}</td>
+      <td>${memBadge}</td>
+      <td>${data.vms.length}</td>
+      <td style="font-size:11px;color:var(--muted)">${rec.join(' · ') || '✓ No issues detected'}</td>
+    </tr>`;
+  });
+  setText('r-overcommit', overcommitRisk);
+  document.getElementById('t-overcommit').innerHTML = ocRows.length ? ocRows.join('') : '<tr><td colspan="7" class="empty">No cluster data (load host sheet)</td></tr>';
+
+  // High vCPU VMs
+  const hvRows = highVCPU.sort((a,b) => b.vcpu - a.vcpu).map(vm => {
+    const suggested = vm.vcpu > 16 ? 16 : 8;
+    const pri = vm.vcpu > 16 ? '<span class="priority-high">● HIGH</span>' : '<span class="priority-med">● MEDIUM</span>';
+    return `<tr>
+      <td style="font-weight:700;color:var(--text)">${vm.name}</td>
+      <td style="color:var(--danger);font-weight:700">${vm.vcpu}</td>
+      <td>${(vm.vramMB/1024).toFixed(1)}</td>
+      <td style="color:var(--muted)">${vm.cluster}</td>
+      <td>${powerBadge(vm.power)}</td>
+      <td><span class="savings-chip">${suggested} vCPU</span></td>
+      <td>${pri}</td>
+      <td style="font-size:11px;color:var(--muted)">${vm.vcpu > 16 ? 'Exceeds NUMA boundary (>16); severe scheduling impact' : 'Crosses 8-vCPU NUMA boundary; review workload needs'}</td>
+    </tr>`;
+  });
+  setText('r-highvcpu-count', highVCPU.length + ' VMs');
+  document.getElementById('t-highvcpu').innerHTML = hvRows.length ? hvRows.join('') : '<tr><td colspan="8" class="empty">✓ No VMs with excessive vCPUs</td></tr>';
+
+  // Powered off
+  const poffRows = offVMs.sort((a,b) => b.vramMB - a.vramMB).map(vm => {
+    const age = vm.age || '—';
+    return `<tr>
+      <td style="font-weight:600;color:var(--text)">${vm.name}</td>
+      <td style="color:var(--muted)">${vm.vcpu}</td>
+      <td style="color:var(--warn)">${(vm.vramMB/1024).toFixed(1)}</td>
+      <td>${vm.provGiB.toFixed(1)}</td>
+      <td style="color:var(--muted)">${vm.cluster}</td>
+      <td style="font-size:11px">${vm.os}</td>
+      <td><span class="badge badge-warn">Review & Decommission</span></td>
+    </tr>`;
+  });
+  setText('r-poff-count', offVMs.length + ' VMs');
+  document.getElementById('t-poweredoff').innerHTML = poffRows.length ? poffRows.join('') : '<tr><td colspan="7" class="empty">✓ No powered-off VMs</td></tr>';
+
+  // Right-sizing
+  const rsVMs = [];
+  vms.forEach(vm => {
+    const rec = getRightSizeRec(vm);
+    if (rec) rsVMs.push({ vm, rec });
+  });
+  rsVMs.sort((a,b) => {
+    const order = { high: 0, medium: 1, low: 2 };
+    return (order[a.rec.priority] || 2) - (order[b.rec.priority] || 2);
+  });
+  const rsRows = rsVMs.map(({ vm, rec }) => {
+    const priEl = rec.priority === 'high' ? '<span class="priority-high">● HIGH</span>' :
+                  rec.priority === 'medium' ? '<span class="priority-med">● MEDIUM</span>' :
+                  '<span class="priority-low">● LOW</span>';
+    const cpuDiff = rec.suggestedVCPU !== vm.vcpu;
+    const ramDiff = Math.abs(rec.suggestedRAMGiB - parseFloat(rec.currentRAMGiB)) > 1;
+    return `<tr>
+      <td style="font-weight:600;color:var(--text)">${vm.name}</td>
+      <td style="color:${vm.vcpu > 8 ? 'var(--danger)' : 'var(--text)'}">${vm.vcpu}</td>
+      <td>${cpuDiff ? `<span class="savings-chip">${rec.suggestedVCPU}</span>` : `<span style="color:var(--ok)">✓ ${vm.vcpu}</span>`}</td>
+      <td>${rec.currentRAMGiB} GiB</td>
+      <td>${ramDiff ? `<span class="savings-chip">${rec.suggestedRAMGiB} GiB</span>` : `<span style="color:var(--ok)">✓ OK</span>`}</td>
+      <td style="font-size:11px;color:var(--muted)">${rec.os}</td>
+      <td>${priEl}</td>
+      <td style="font-size:11px;color:var(--muted);max-width:240px;white-space:normal">${rec.notes}</td>
+    </tr>`;
+  });
+  setText('r-rs-count', rsVMs.length + ' VMs');
+  document.getElementById('t-rightsizing').innerHTML = rsRows.length ? rsRows.join('') : '<tr><td colspan="8" class="empty">✓ No right-sizing recommendations</td></tr>';
+}
+
+function riskBadge(risk, label) {
+  if (risk === 'high') return `<span class="badge badge-danger">🔴 ${label} HIGH</span>`;
+  if (risk === 'medium') return `<span class="badge badge-warn">⚠️ ${label} MEDIUM</span>`;
+  if (risk === 'ok') return `<span class="badge badge-ok">✓ ${label} OK</span>`;
+  return `<span class="badge badge-info">${label}</span>`;
+}
+
+// ============================================================
+// STORAGE
+// ============================================================
+function renderStorage() {
+  const sorted = [...state.vms].sort((a,b) => b.provGiB - a.provGiB).slice(0, 30);
+  const tbody = document.getElementById('t-storage');
+  tbody.innerHTML = sorted.length ? sorted.map(vm => `
+    <tr>
+      <td style="font-weight:600;color:var(--text)">${vm.name}</td>
+      <td style="color:var(--accent)">${vm.provGiB.toFixed(1)}</td>
+      <td>${vm.inUseGiB > 0 ? vm.inUseGiB.toFixed(1) : '—'}</td>
+      <td style="color:var(--muted)">${vm.cluster}</td>
+      <td>${powerBadge(vm.power)}</td>
+    </tr>`).join('') : '<tr><td colspan="5" class="empty">No data loaded</td></tr>';
+}
+
+// ============================================================
+// EOL
+// ============================================================
+function renderEOL() {
+  const osCounts = {};
+  state.vms.forEach(v => {
+    const os = detectOSFamily(v.os);
+    osCounts[os] = (osCounts[os] || 0) + 1;
+  });
+  const rows = Object.entries(osCounts).sort((a,b) => b[1]-a[1]).map(([os, count]) => {
+    const info = EOL_STATUS[os] || { date: 'Unknown', status: 'unknown' };
+    const badge = info.status === 'eol' ? '<span class="badge badge-danger">✗ EOL</span>' :
+                  info.status === 'warn' ? '<span class="badge badge-warn">⚠️ Soon</span>' :
+                  info.status === 'ok' ? '<span class="badge badge-ok">✓ Supported</span>' :
+                  '<span class="badge badge-info">— Unknown</span>';
+    const note = info.status === 'eol' ? 'Immediate upgrade required — no security patches' :
+                 info.status === 'warn' ? 'Plan upgrade soon' :
+                 info.status === 'ok' ? `EoS: ${info.date}` : 'Check vendor docs';
+    return `<tr>
+      <td style="font-weight:700;color:var(--text)">${os}</td>
+      <td style="color:var(--accent);font-family:var(--mono)">${count}</td>
+      <td>${badge}</td>
+      <td style="font-size:11px;color:var(--muted)">${note}</td>
+    </tr>`;
+  });
+  document.getElementById('t-eol').innerHTML = rows.length ? rows.join('') : '<tr><td colspan="4" class="empty">No data loaded</td></tr>';
+}
+
+// Init
+renderAll();
+</script>
+</body>
+</html>
