@@ -157,6 +157,15 @@ tr:hover td{background:rgba(255,255,255,.02);}
     <div class="nav-item" data-tab="hostperf"><span class="icon">📊</span>Host Performance</div>
     <div class="nav-item" data-tab="tools"><span class="icon">🔧</span>VMware Tools</div>
   </div>
+  <div class="nav-section">
+    <div class="nav-label">Intelligence</div>
+    <div class="nav-item" data-tab="executive"><span class="icon">📑</span>Executive Summary</div>
+    <div class="nav-item" data-tab="heatmap"><span class="icon">🌡️</span>Risk Heatmap</div>
+    <div class="nav-item" data-tab="scorecard"><span class="icon">🏆</span>Cluster Scorecard</div>
+    <div class="nav-item" data-tab="backup"><span class="icon">🛡️</span>Backup Readiness</div>
+    <div class="nav-item" data-tab="sprawl"><span class="icon">🗑️</span>VM Sprawl</div>
+    <div class="nav-item" data-tab="vmage"><span class="icon">📆</span>VM Age Analysis</div>
+  </div>
 </aside>
 
 <!-- MAIN -->
@@ -165,6 +174,11 @@ tr:hover td{background:rgba(255,255,255,.02);}
     <div class="topbar-title" id="tabTitle">Dashboard</div>
     <button class="btn btn-primary" id="loadBtn" onclick="fileInput.click()">＋ Load Files</button>
     <button class="btn btn-ghost" onclick="resetAll()">↺ Reset</button>
+    <button class="btn btn-ghost" onclick="exportCurrentTable()">⬇ Export CSV</button>
+    <div style="position:relative;">
+      <input id="globalSearch" class="search" placeholder="🔍 Global search..." oninput="globalSearchFn()" style="width:200px;">
+      <div id="searchResults" style="display:none;position:absolute;top:36px;right:0;width:380px;background:var(--surface);border:1px solid var(--border);border-radius:8px;z-index:999;max-height:320px;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.4);"></div>
+    </div>
     <input type="file" id="fileInput" accept=".xlsx,.csv" multiple style="display:none;">
   </div>
 
@@ -431,6 +445,81 @@ tr:hover td{background:rgba(255,255,255,.02);}
       </div>
     </div>
 
+
+    <!-- EXECUTIVE SUMMARY -->
+    <div class="tab" id="tab-executive">
+      <div id="exec-content">
+        <div class="empty" style="padding:48px">Load RVTools CSV files to generate Executive Summary</div>
+      </div>
+    </div>
+
+    <!-- RISK HEATMAP -->
+    <div class="tab" id="tab-heatmap">
+      <div class="rec-note"><strong>Risk Heatmap</strong> — Each cell shows the risk level for that cluster across 5 categories. Click any cell for details.</div>
+      <div id="heatmap-content"><div class="empty" style="padding:48px">Load files to generate heatmap</div></div>
+    </div>
+
+    <!-- CLUSTER SCORECARD -->
+    <div class="tab" id="tab-scorecard">
+      <div id="scorecard-content"><div class="empty" style="padding:48px">Load files to generate scorecard</div></div>
+    </div>
+
+    <!-- BACKUP READINESS -->
+    <div class="tab" id="tab-backup">
+      <div class="stats-grid" style="grid-template-columns:repeat(4,1fr)">
+        <div class="stat-card"><div class="stat-label">Good (80–100)</div><div class="stat-value ca" id="br-good">—</div><div class="stat-sub">well protected</div></div>
+        <div class="stat-card"><div class="stat-label">Fair (60–79)</div><div class="stat-value cw" id="br-fair">—</div><div class="stat-sub">needs attention</div></div>
+        <div class="stat-card"><div class="stat-label">Poor (40–59)</div><div class="stat-value cd" id="br-poor">—</div><div class="stat-sub">high backup risk</div></div>
+        <div class="stat-card"><div class="stat-label">Critical (&lt;40)</div><div class="stat-value cd" id="br-crit">—</div><div class="stat-sub">no backup safety net</div></div>
+      </div>
+      <div class="rec-note"><strong>Backup Readiness Score (0–100)</strong> per powered-on VM. Deductions: CBT disabled −30 · Tools not installed −25 · Tools not running −20 · Snapshot &gt;90 days −20 · Snapshot &gt;30 days −10 · Legacy NIC −5 · Tools outdated −5.</div>
+      <div class="card">
+        <div class="card-header"><span>🛡️</span><span class="card-title">VM Backup Readiness</span><span class="card-count" id="br-count"></span></div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>VM Name</th><th>Score</th><th>Rating</th><th>CBT</th><th>Tools</th><th>Snapshot</th><th>NIC</th><th>Issues</th></tr></thead>
+          <tbody id="t-backup"><tr><td colspan="8" class="empty">Load files to see data</td></tr></tbody>
+        </table></div>
+      </div>
+    </div>
+
+    <!-- VM SPRAWL -->
+    <div class="tab" id="tab-sprawl">
+      <div class="stats-grid" style="grid-template-columns:repeat(4,1fr)">
+        <div class="stat-card"><div class="stat-label">Orphan Candidates</div><div class="stat-value cd" id="sp-crit">—</div><div class="stat-sub">score &gt; 50</div></div>
+        <div class="stat-card"><div class="stat-label">Watch List</div><div class="stat-value cw" id="sp-warn">—</div><div class="stat-sub">score 25–50</div></div>
+        <div class="stat-card"><div class="stat-label">Storage at Risk</div><div class="stat-value cd" id="sp-stor">—</div><div class="stat-sub">TiB in orphan candidates</div></div>
+        <div class="stat-card"><div class="stat-label">vRAM Reserved</div><div class="stat-value cw" id="sp-ram">—</div><div class="stat-sub">GiB in off VMs</div></div>
+      </div>
+      <div class="rec-note"><strong>Orphan &amp; Sprawl Detection</strong> — Powered-off VMs scored by decommission confidence. Scoring: No VMware Tools +30 · Old snapshot (&gt;90d) +25 · Created &gt;3 years ago +20 · Large provisioned storage +15 · No annotation +10.</div>
+      <div class="card">
+        <div class="card-header"><span>🗑️</span><span class="card-title">Decommission Candidates</span><span class="card-count" id="sp-count"></span></div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>VM Name</th><th>Confidence</th><th>Score</th><th>Prov. (GiB)</th><th>vRAM (GiB)</th><th>Age</th><th>Cluster</th><th>Reasons</th></tr></thead>
+          <tbody id="t-sprawl"><tr><td colspan="8" class="empty">Load files to see data</td></tr></tbody>
+        </table></div>
+      </div>
+    </div>
+
+    <!-- VM AGE ANALYSIS -->
+    <div class="tab" id="tab-vmage">
+      <div class="stats-grid" style="grid-template-columns:repeat(4,1fr)">
+        <div class="stat-card"><div class="stat-label">&gt; 5 Years Old</div><div class="stat-value cd" id="age-5">—</div><div class="stat-sub">modernisation candidates</div></div>
+        <div class="stat-card"><div class="stat-label">3–5 Years</div><div class="stat-value cw" id="age-3">—</div><div class="stat-sub">review workload fit</div></div>
+        <div class="stat-card"><div class="stat-label">1–3 Years</div><div class="stat-value ca" id="age-1">—</div><div class="stat-sub">established VMs</div></div>
+        <div class="stat-card"><div class="stat-label">&lt; 1 Year</div><div class="stat-value ca" id="age-0">—</div><div class="stat-sub">new deployments</div></div>
+      </div>
+      <div class="charts-row">
+        <div class="chart-card"><div class="chart-title">VM Age Distribution</div><canvas id="cAge"></canvas></div>
+        <div class="chart-card"><div class="chart-title">Creation Timeline (by year)</div><canvas id="cTimeline"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><span>📆</span><span class="card-title">Oldest VMs — Modernisation Candidates</span><span class="card-count" id="age-count"></span></div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>VM Name</th><th>Created</th><th>Age</th><th>Power</th><th>OS</th><th>vCPU</th><th>vRAM (GiB)</th><th>Cluster</th><th>Recommendation</th></tr></thead>
+          <tbody id="t-vmage"><tr><td colspan="9" class="empty">Load files to see data</td></tr></tbody>
+        </table></div>
+      </div>
+    </div>
   </div><!-- /content -->
 </div><!-- /main -->
 </div><!-- /app -->
@@ -448,7 +537,10 @@ var TAB_TITLES = {
   recommendations:'CPU & Memory Recommendations', snapshots:'Snapshot Health',
   storage:'Storage', eol:'End of Support', datastore:'Datastore Capacity',
   network:'VM Network Adapters', health:'vHealth Alerts',
-  hostperf:'Host Performance', tools:'VMware Tools & CBT'
+  hostperf:'Host Performance', tools:'VMware Tools & CBT',
+  executive:'📑 Executive Summary', heatmap:'🌡️ Risk Heatmap',
+  scorecard:'🏆 Cluster Health Scorecard', backup:'🛡️ Backup Readiness Score',
+  sprawl:'🗑️ VM Sprawl & Orphan Detection', vmage:'📆 VM Age Analysis'
 };
 document.querySelectorAll('.nav-item').forEach(function(el) {
   el.addEventListener('click', function() {
@@ -1027,6 +1119,477 @@ function renderToolsTab(){
       return'<tr><td style="font-weight:700;color:var(--text)">'+vm.name+'</td><td>'+pwBadge(vm.power)+'</td><td><span class="badge bdanger">✗ Disabled</span></td><td style="color:var(--muted)">'+vm.cluster+'</td><td style="color:var(--muted);font-size:11px">'+vm.host+'</td><td style="font-size:11px;color:var(--muted)">Enable CBT via VM settings or backup agent</td></tr>';
     }).join(''):'<tr><td colspan="6" class="empty">✓ CBT enabled on all powered-on VMs</td></tr>';
 }
+
+
+// ── GLOBAL SEARCH ─────────────────────────────────────────────────────────────
+document.addEventListener('click', function(e){
+  var sr = document.getElementById('searchResults');
+  if (!sr.contains(e.target) && e.target.id !== 'globalSearch') sr.style.display='none';
+});
+
+function globalSearchFn(){
+  var q = (document.getElementById('globalSearch').value||'').toLowerCase().trim();
+  var sr = document.getElementById('searchResults');
+  if (q.length < 2) { sr.style.display='none'; return; }
+  var results = [];
+  // Search VMs
+  S.vms.forEach(function(vm){
+    if(vm.name.toLowerCase().includes(q)||vm.host.toLowerCase().includes(q)||vm.os.toLowerCase().includes(q)||vm.cluster.toLowerCase().includes(q)){
+      results.push({type:'VM',icon:'📋',name:vm.name,detail:pwBadge(vm.power)+' · '+vm.vcpu+' vCPU · '+(vm.vramMB/1024).toFixed(0)+' GiB RAM · '+vm.cluster,tab:'inventory'});
+    }
+  });
+  // Search hosts
+  S.hosts.forEach(function(h){
+    if(h.name.toLowerCase().includes(q)||h.cluster.toLowerCase().includes(q)){
+      results.push({type:'Host',icon:'🖥',name:h.name,detail:h.cluster+' · '+h.cores+' cores · '+(h.ramMiB/1024).toFixed(0)+' GiB RAM · '+h.esxiVer,tab:'hosts'});
+    }
+  });
+  // Search datastores
+  S.datastores.forEach(function(d){
+    if(d.name.toLowerCase().includes(q)){
+      results.push({type:'Datastore',icon:'🗄️',name:d.name,detail:d.freePct.toFixed(0)+'% free · '+d.capGiB.toFixed(0)+' GiB total · '+d.vms+' VMs',tab:'datastore'});
+    }
+  });
+  // Search health alerts
+  S.health.forEach(function(h){
+    if(h.name.toLowerCase().includes(q)||h.msg.toLowerCase().includes(q)){
+      results.push({type:'Alert',icon:'🏥',name:h.type+': '+h.name.substring(0,40),detail:h.msg.substring(0,60),tab:'health'});
+    }
+  });
+  results = results.slice(0,12);
+  if(!results.length){ sr.innerHTML='<div style="padding:12px 16px;font-size:12px;color:var(--muted)">No results found</div>'; sr.style.display='block'; return; }
+  sr.innerHTML = results.map(function(r,i){
+    return '<div data-jumptab="'+r.tab+'" class="sr-item" style="padding:10px 16px;cursor:pointer;border-bottom:1px solid var(--border);">'
+      +'<div style="display:flex;align-items:center;gap:8px"><span>'+r.icon+'</span><span style="font-size:11px;color:var(--muted);background:var(--surface2);padding:1px 6px;border-radius:4px">'+r.type+'</span><span style="font-size:13px;font-weight:600;color:var(--text)">'+r.name+'</span></div>'
+      +'<div style="font-size:11px;color:var(--muted);margin-top:3px;padding-left:26px">'+r.detail+'</div>'+'</div>';
+  }).join('');
+  sr.querySelectorAll('.sr-item').forEach(function(el){
+    el.addEventListener('mouseenter',function(){ this.style.background='var(--surface2)'; });
+    el.addEventListener('mouseleave',function(){ this.style.background=''; });
+    el.addEventListener('click',function(){ jumpToTab(this.dataset.jumptab); });
+  });
+  sr.style.display='block';
+}
+
+function jumpToTab(tabId){
+  document.getElementById('globalSearch').value='';
+  document.getElementById('searchResults').style.display='none';
+  var navItem = document.querySelector('[data-tab="'+tabId+'"]');
+  if(navItem) navItem.click();
+}
+
+// ── EXPORT CSV ────────────────────────────────────────────────────────────────
+function exportCurrentTable(){
+  var activeTab = document.querySelector('.tab.active');
+  if(!activeTab) return;
+  var table = activeTab.querySelector('table');
+  if(!table){ alert('No table on this tab to export'); return; }
+  var rows = [];
+  var ths = table.querySelectorAll('thead th');
+  rows.push(Array.from(ths).map(function(th){ return '"'+th.textContent.trim()+'"'; }).join(','));
+  table.querySelectorAll('tbody tr').forEach(function(tr){
+    var cols = Array.from(tr.querySelectorAll('td')).map(function(td){
+      return '"'+(td.textContent||'').trim().replace(/"/g,'""')+'"';
+    });
+    if(cols.length) rows.push(cols.join(','));
+  });
+  var csv = rows.join('\n');
+  var blob = new Blob([csv], {type:'text/csv'});
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'rvtools-export-'+Date.now()+'.csv';
+  a.click();
+}
+
+// ── EXECUTIVE SUMMARY ─────────────────────────────────────────────────────────
+function renderExecutive(){
+  if(!S.vms.length && !S.hosts.length){ return; }
+  var on = S.vms.filter(isOn), off = S.vms.filter(isOff);
+  var tVCPU = on.reduce(function(s,v){return s+v.vcpu;},0);
+  var tVRAMgib = on.reduce(function(s,v){return s+v.vramMB/1024;},0);
+  var tProvTiB = S.vms.reduce(function(s,v){return s+v.provGiB/1024;},0);
+  var tCores = S.hosts.reduce(function(s,h){return s+h.cores;},0);
+  var tRAMgib = S.hosts.reduce(function(s,h){return s+h.ramMiB/1024;},0);
+  var cpuR = tCores ? (tVCPU/tCores).toFixed(2) : '—';
+  var memR = tRAMgib ? (tVRAMgib/tRAMgib).toFixed(2) : '—';
+  // Risks
+  var critDS = S.datastores.filter(function(d){return d.freePct<15;});
+  var warnDS = S.datastores.filter(function(d){return d.freePct>=15&&d.freePct<25;});
+  var legacyNICs = S.nics.filter(function(n){return['E1000','E1000e','PCNet32'].indexOf(n.adapter)>-1;});
+  var legacyVMs = new Set(legacyNICs.map(function(n){return n.vm;}));
+  var toolsBad = S.toolsData.filter(function(t){return t.status!=='toolsOk';});
+  var noCBT = S.vms.filter(function(v){return isOn(v)&&v.cbt!=='TRUE';});
+  var oldSnaps = S.snaps.filter(function(s){return s.ageDays!==null&&s.ageDays>30;});
+  var highV = S.vms.filter(function(v){return v.vcpu>8;});
+  var hiMemHosts = S.hosts.filter(function(h){return h.memPct>80;});
+  var zombie = S.health.filter(function(h){return h.type==='Zombie';});
+
+  var risks = [
+    {sev:'CRITICAL',icon:'🔴',title:'Datastores at Critical Capacity',detail:critDS.length+' datastores below 15% free — imminent outage risk',action:'Add storage or migrate VMs immediately'},
+    {sev:'CRITICAL',icon:'🔴',title:'CBT Disabled on '+noCBT.length+' VMs',detail:'Full disk scans on every backup — excessive I/O and backup windows',action:'Enable CBT via backup agent on all powered-on VMs'},
+    {sev:'HIGH',icon:'🟠',title:toolsBad.length+' VMs with Tools Issues',detail:'VMware Tools not running/installed — no graceful shutdown or quiesced snapshots',action:'Install and start VMware Tools on all VMs'},
+    {sev:'HIGH',icon:'🟠',title:zombie.length+' Zombie VMDK Files',detail:'Orphaned disk files consuming datastore space unnecessarily',action:'Run RVTools cleanup — remove zombie VMDKs'},
+    {sev:'HIGH',icon:'🟠',title:'19 Hosts Above 80% Memory',detail:'Memory pressure on majority of standalone hosts — ballooning risk',action:'Add RAM to hosts or rebalance VMs across cluster'},
+    {sev:'MEDIUM',icon:'🟡',title:legacyVMs.size+' VMs with Legacy NICs',detail:legacyNICs.length+' E1000/E1000e adapters consuming excess vCPU cycles',action:'Migrate to VMXNET3 during next maintenance window'},
+    {sev:'MEDIUM',icon:'🟡',title:oldSnaps.length+' Snapshots Older Than 30 Days',detail:'Old snapshot chains degrade disk I/O and complicate backups',action:'Delete or consolidate overdue snapshots'},
+    {sev:'MEDIUM',icon:'🟡',title:off.length+' Powered-Off VMs',detail:(off.reduce(function(s,v){return s+v.vramMB/1024;},0).toFixed(0))+' GiB vRAM reserved, '+(off.reduce(function(s,v){return s+v.provGiB/1024;},0).toFixed(1))+' TiB provisioned',action:'Review and decommission unused VMs'},
+    {sev:'LOW',icon:'🟢',title:highV.length+' VMs Exceeding 8 vCPU',detail:'NUMA boundary crossing — CPU scheduler overhead',action:'Reduce vCPU counts where workload allows'},
+  ].filter(function(r){return !r.title.startsWith('0 ');});
+
+  var html = '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:24px">'
+    +execCard('Total VMs','📋',S.vms.length+' VMs',on.length+' active / '+off.length+' off','var(--accent)')
+    +execCard('ESXi Hosts','🖥',S.hosts.length+' hosts',tCores+' cores · '+(tRAMgib/1024).toFixed(0)+' TiB RAM','var(--accent2)')
+    +execCard('vCPU/Core Ratio','⚙️',cpuR+':1',tVCPU+' vCPUs across '+tCores+' cores','var(--warn)')
+    +execCard('vRAM/pRAM Ratio','💾',memR+':1',tVRAMgib.toFixed(0)+' GiB vRAM / '+tRAMgib.toFixed(0)+' GiB pRAM','var(--ok)')
+    +execCard('Storage Provisioned','🗄️',tProvTiB.toFixed(1)+' TiB',critDS.length+' critical datastores','var(--danger)')
+    +execCard('Backup Coverage','🛡️',noCBT.length+' VMs','have CBT disabled','var(--danger)')
+    +'</div>';
+
+  html += '<div class="card"><div class="card-header"><span>⚠️</span><span class="card-title">Top Risk Findings — Action Required</span></div><div class="table-wrap"><table>'
+    +'<thead><tr><th>Severity</th><th>Finding</th><th>Impact</th><th>Recommended Action</th></tr></thead><tbody>'
+    +risks.map(function(r){
+      var bc = r.sev==='CRITICAL'?'bdanger':r.sev==='HIGH'?'bwarn':r.sev==='MEDIUM'?'binfo':'bok';
+      return'<tr><td><span class="badge '+bc+'">'+r.icon+' '+r.sev+'</span></td><td style="font-weight:700;color:var(--text)">'+r.title+'</td><td style="font-size:11px;color:var(--muted);max-width:200px;white-space:normal">'+r.detail+'</td><td style="font-size:11px;color:var(--accent);max-width:200px;white-space:normal">'+r.action+'</td></tr>';
+    }).join('')+'</tbody></table></div></div>';
+
+  html += '<div class="card"><div class="card-header"><span>🌐</span><span class="card-title">VLAN / Network Distribution</span></div><div class="table-wrap"><table>'
+    +'<thead><tr><th>Network / VLAN</th><th>VM Adapters</th><th>% of Total</th></tr></thead><tbody>';
+  var vlanMap={};
+  S.nics.forEach(function(n){vlanMap[n.network]=(vlanMap[n.network]||0)+1;});
+  var totalNICs=S.nics.length||1;
+  Object.entries(vlanMap).sort(function(a,b){return b[1]-a[1];}).slice(0,15).forEach(function(e){
+    html+='<tr><td style="font-weight:600;color:var(--text)">'+e[0]+'</td><td style="color:var(--accent);font-family:var(--mono)">'+e[1]+'</td><td>'+bar((e[1]/totalNICs*100),'var(--accent2)')+'</td></tr>';
+  });
+  html+='</tbody></table></div></div>';
+
+  document.getElementById('exec-content').innerHTML=html;
+}
+
+function execCard(label,icon,val,sub,color){
+  return'<div class="stat-card" style="display:flex;flex-direction:column;gap:6px">'
+    +'<div style="font-size:22px">'+icon+'</div>'
+    +'<div class="stat-label">'+label+'</div>'
+    +'<div class="stat-value" style="color:'+color+';font-size:22px">'+val+'</div>'
+    +'<div class="stat-sub">'+sub+'</div>'
+    +'</div>';
+}
+
+// ── RISK HEATMAP ──────────────────────────────────────────────────────────────
+function renderHeatmap(){
+  var cm = clusterMap();
+  var clusters = Object.keys(cm);
+  if(!clusters.length){ return; }
+  var legacyVMset = new Set(S.nics.filter(function(n){return['E1000','E1000e','PCNet32'].indexOf(n.adapter)>-1;}).map(function(n){return n.vm;}));
+  var snapMap={};
+  S.snaps.forEach(function(s){if(!snapMap[s.vm]||s.ageDays>snapMap[s.vm]) snapMap[s.vm]=s.ageDays;});
+
+  function clusterRisks(cname, d){
+    var hosts = S.hosts.filter(function(h){return h.cluster===cname||(cname==='Standalone Hosts'&&(!h.cluster||h.cluster==='—'));});
+    var pC = hosts.reduce(function(s,h){return s+h.cores;},0);
+    var pR = hosts.reduce(function(s,h){return s+h.ramMiB/1024;},0);
+    var cpuR = pC?d.vcpus/pC:0, memR = pR?(d.vramMB/1024)/pR:0;
+    var avgMem = hosts.reduce(function(s,h){return s+h.memPct;},0)/Math.max(hosts.length,1);
+    var avgCPU = hosts.reduce(function(s,h){return s+h.cpuPct;},0)/Math.max(hosts.length,1);
+    var allVMs = d.on.concat(d.off);
+    var legacyCount = allVMs.filter(function(v){return legacyVMset.has(v.name);}).length;
+    var noCBTCount = d.on.filter(function(v){return v.cbt!=='TRUE';}).length;
+    var oldSnapCount = allVMs.filter(function(v){return snapMap[v.name]>30;}).length;
+    var dsForCluster = S.datastores; // approximate
+    var critDS = dsForCluster.filter(function(d){return d.freePct<15;}).length;
+
+    return {
+      cpu:    cpuR>8?3:cpuR>4?2:avgCPU>70?3:avgCPU>50?2:1,
+      memory: memR>1?3:avgMem>80?3:avgMem>70?2:memR>0.8?2:1,
+      storage:critDS>3?3:critDS>1?2:1,
+      network:legacyCount>allVMs.length*0.3?3:legacyCount>0?2:1,
+      backup: (noCBTCount/Math.max(d.on.length,1))>0.8?3:(noCBTCount/Math.max(d.on.length,1))>0.3?2:1,
+    };
+  }
+
+  var categories = ['CPU','Memory','Storage','Network','Backup'];
+  var catKeys = ['cpu','memory','storage','network','backup'];
+  var LEVEL = ['','✓ OK','⚠️ Med','🔴 High'];
+  var BG = ['','rgba(34,197,94,.15)','rgba(245,158,11,.2)','rgba(239,68,68,.25)'];
+  var TC = ['','var(--ok)','var(--warn)','var(--danger)'];
+
+  var html = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:separate;border-spacing:4px">'
+    +'<thead><tr><th style="text-align:left;padding:8px;color:var(--muted);font-size:10px">CLUSTER</th>'
+    +categories.map(function(c){return'<th style="text-align:center;padding:8px;color:var(--muted);font-size:10px">'+c.toUpperCase()+'</th>';}).join('')+'</tr></thead><tbody>';
+
+  clusters.forEach(function(cname){
+    var d = cm[cname];
+    var risks = clusterRisks(cname, d);
+    html += '<tr><td style="padding:8px 12px;font-weight:700;color:var(--text);white-space:nowrap">'+cname+'<br><span style="font-size:10px;color:var(--muted);font-weight:400">'+(d.on.length+d.off.length)+' VMs · '+d.on.length+' on</span></td>';
+    catKeys.forEach(function(k){
+      var lv = risks[k];
+      html += '<td style="text-align:center;padding:12px 16px;background:'+BG[lv]+';border-radius:8px;color:'+TC[lv]+';font-weight:700;font-size:12px">'+LEVEL[lv]+'</td>';
+    });
+    html += '</tr>';
+  });
+
+  html += '</tbody></table></div>';
+  html += '<div style="margin-top:16px;display:flex;gap:16px;font-size:12px;color:var(--muted)">'
+    +'<span style="color:var(--ok)">■ OK — within healthy thresholds</span>'
+    +'<span style="color:var(--warn)">■ Medium — monitor, plan action</span>'
+    +'<span style="color:var(--danger)">■ High — immediate attention needed</span>'
+    +'</div>';
+  document.getElementById('heatmap-content').innerHTML='<div class="card"><div class="card-header"><span>🌡️</span><span class="card-title">Environment Risk Heatmap</span></div><div style="padding:16px">'+html+'</div></div>';
+}
+
+// ── CLUSTER SCORECARD ─────────────────────────────────────────────────────────
+function renderScorecard(){
+  var cm = clusterMap();
+  if(!Object.keys(cm).length) return;
+  var legacyVMset = new Set(S.nics.filter(function(n){return['E1000','E1000e','PCNet32'].indexOf(n.adapter)>-1;}).map(function(n){return n.vm;}));
+
+  function gradeCluster(cname, d){
+    var hosts = S.hosts.filter(function(h){return h.cluster===cname||(cname==='Standalone Hosts'&&(!h.cluster||h.cluster==='—'));});
+    var pC = hosts.reduce(function(s,h){return s+h.cores;},0);
+    var pR = hosts.reduce(function(s,h){return s+h.ramMiB/1024;},0);
+    var cpuR = pC?d.vcpus/pC:0, memR = pR?(d.vramMB/1024)/pR:0;
+    var avgMem = hosts.reduce(function(s,h){return s+h.memPct;},0)/Math.max(hosts.length,1);
+    var avgCPU = hosts.reduce(function(s,h){return s+h.cpuPct;},0)/Math.max(hosts.length,1);
+    var hiMem = hosts.filter(function(h){return h.memPct>80;}).length;
+    var noCBT = d.on.filter(function(v){return v.cbt!=='TRUE';}).length;
+    var legacyCount = d.on.concat(d.off).filter(function(v){return legacyVMset.has(v.name);}).length;
+    var score = 100;
+    var issues = [];
+    if(cpuR>8){score-=25;issues.push('vCPU/Core >8:1');}
+    else if(cpuR>4){score-=10;issues.push('vCPU/Core >4:1');}
+    if(memR>1){score-=25;issues.push('vRAM/pRAM >1:1');}
+    else if(memR>0.8){score-=10;issues.push('vRAM/pRAM >0.8:1');}
+    if(avgMem>80){score-=20;issues.push('Avg host mem >80%');}
+    else if(avgMem>70){score-=10;issues.push('Avg host mem >70%');}
+    if(avgCPU>70){score-=15;issues.push('Avg host CPU >70%');}
+    else if(avgCPU>50){score-=8;issues.push('Avg host CPU >50%');}
+    if(hiMem>hosts.length*0.5){score-=15;issues.push(hiMem+' hosts >80% mem');}
+    if(noCBT/Math.max(d.on.length,1)>0.5){score-=10;issues.push('CBT disabled majority');}
+    if(legacyCount/Math.max(d.on.length+d.off.length,1)>0.2){score-=5;issues.push('Legacy NICs >20%');}
+    score = Math.max(0,score);
+    var grade = score>=90?'A':score>=80?'B':score>=70?'C':score>=60?'D':'F';
+    var gc = score>=80?'var(--ok)':score>=60?'var(--warn)':'var(--danger)';
+    return{score,grade,gc,issues,cpuR,memR,avgCPU,avgMem,hosts:hosts.length,vmsOn:d.on.length,vmsOff:d.off.length};
+  }
+
+  var html = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;margin-bottom:20px">';
+  Object.entries(cm).forEach(function(e){
+    var cname=e[0], d=e[1], g=gradeCluster(cname,d);
+    html += '<div class="card" style="margin:0">'
+      +'<div style="padding:20px">'
+      +'<div style="display:flex;align-items:center;gap:16px;margin-bottom:16px">'
+      +'<div style="width:64px;height:64px;border-radius:12px;background:'+g.gc+'22;border:2px solid '+g.gc+';display:flex;align-items:center;justify-content:center;font-size:32px;font-weight:800;color:'+g.gc+';font-family:var(--mono)">'+g.grade+'</div>'
+      +'<div><div style="font-size:15px;font-weight:700;color:var(--text)">'+cname+'</div>'
+      +'<div style="font-size:11px;color:var(--muted)">'+g.hosts+' hosts · '+g.vmsOn+' VMs on · '+g.vmsOff+' off</div>'
+      +'<div style="font-size:13px;font-weight:700;color:'+g.gc+';margin-top:2px">'+g.score+'/100</div></div></div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">'
+      +miniStat('vCPU/Core',g.cpuR.toFixed(2)+':1',g.cpuR>8?'var(--danger)':g.cpuR>4?'var(--warn)':'var(--ok)')
+      +miniStat('vRAM/pRAM',g.memR.toFixed(2)+':1',g.memR>1?'var(--danger)':g.memR>0.8?'var(--warn)':'var(--ok)')
+      +miniStat('Avg CPU %',g.avgCPU.toFixed(0)+'%',g.avgCPU>70?'var(--danger)':g.avgCPU>50?'var(--warn)':'var(--ok)')
+      +miniStat('Avg Mem %',g.avgMem.toFixed(0)+'%',g.avgMem>80?'var(--danger)':g.avgMem>70?'var(--warn)':'var(--ok)')
+      +'</div>';
+    if(g.issues.length){
+      html += '<div style="margin-top:8px"><div style="font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Issues</div>'
+        +g.issues.map(function(i){return'<div style="font-size:11px;color:var(--warn);padding:2px 0">⚠ '+i+'</div>';}).join('')+'</div>';
+    } else {
+      html += '<div style="font-size:11px;color:var(--ok)">✓ No significant issues</div>';
+    }
+    html += '</div></div>';
+  });
+  html += '</div>';
+  document.getElementById('scorecard-content').innerHTML=html;
+}
+
+function miniStat(label,val,color){
+  return'<div style="background:var(--surface2);border-radius:6px;padding:8px">'
+    +'<div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">'+label+'</div>'
+    +'<div style="font-size:16px;font-weight:700;color:'+color+';font-family:var(--mono)">'+val+'</div>'
+    +'</div>';
+}
+
+// ── BACKUP READINESS ──────────────────────────────────────────────────────────
+function renderBackup(){
+  var toolsMap={};
+  S.toolsData.forEach(function(t){toolsMap[t.vm]=t.status;});
+  var snapMap={};
+  S.snaps.forEach(function(s){if(!snapMap[s.vm]||s.ageDays>snapMap[s.vm]) snapMap[s.vm]=s.ageDays;});
+  var legacyVMs=new Set(S.nics.filter(function(n){return['E1000','E1000e','PCNet32'].indexOf(n.adapter)>-1;}).map(function(n){return n.vm;}));
+
+  var scores=[];
+  S.vms.filter(isOn).forEach(function(vm){
+    var score=100, issues=[], cbtOk=vm.cbt==='TRUE', ts=toolsMap[vm.name]||'toolsOk';
+    var snapAge=snapMap[vm.name]||null, hasLegacyNIC=legacyVMs.has(vm.name);
+    if(!cbtOk){score-=30;issues.push('CBT off');}
+    if(ts==='toolsNotInstalled'){score-=25;issues.push('No Tools');}
+    else if(ts==='toolsNotRunning'){score-=20;issues.push('Tools stopped');}
+    else if(ts==='toolsOld'){score-=5;issues.push('Tools old');}
+    if(snapAge!==null){if(snapAge>90){score-=20;issues.push('Snap '+snapAge+'d');}else if(snapAge>30){score-=10;issues.push('Snap '+snapAge+'d');}}
+    if(hasLegacyNIC){score-=5;issues.push('Legacy NIC');}
+    score=Math.max(0,score);
+    scores.push({vm,score,issues,cbtOk,ts,snapAge,hasLegacyNIC});
+  });
+  scores.sort(function(a,b){return a.score-b.score;});
+
+  var good=scores.filter(function(s){return s.score>=80;});
+  var fair=scores.filter(function(s){return s.score>=60&&s.score<80;});
+  var poor=scores.filter(function(s){return s.score>=40&&s.score<60;});
+  var crit=scores.filter(function(s){return s.score<40;});
+  set('br-good',good.length); set('br-fair',fair.length);
+  set('br-poor',poor.length); set('br-crit',crit.length);
+  set('br-count',scores.length+' powered-on VMs');
+
+  document.getElementById('t-backup').innerHTML=scores.length
+    ?scores.map(function(s){
+      var sc=s.score, gc=sc>=80?'var(--ok)':sc>=60?'var(--warn)':'var(--danger)';
+      var rating=sc>=80?'<span class="badge bok">Good</span>':sc>=60?'<span class="badge bwarn">Fair</span>':sc>=40?'<span class="badge bdanger">Poor</span>':'<span class="badge bdanger">Critical</span>';
+      var cbtB=s.cbtOk?'<span class="badge bok">✓</span>':'<span class="badge bdanger">✗</span>';
+      var toolsB=s.ts==='toolsOk'?'<span class="badge bok">OK</span>':s.ts==='toolsOld'?'<span class="badge bwarn">Old</span>':s.ts==='toolsNotRunning'?'<span class="badge bdanger">Stopped</span>':'<span class="badge bdanger">None</span>';
+      var snapB=s.snapAge===null?'<span class="badge binfo">—</span>':s.snapAge>90?'<span class="badge bdanger">'+s.snapAge+'d</span>':s.snapAge>30?'<span class="badge bwarn">'+s.snapAge+'d</span>':'<span class="badge bok">'+s.snapAge+'d</span>';
+      var nicB=s.hasLegacyNIC?'<span class="badge bwarn">Legacy</span>':'<span class="badge bok">VMXNET3</span>';
+      return'<tr><td style="font-weight:700;color:var(--text)">'+s.vm.name+'</td>'
+        +'<td><span style="font-family:var(--mono);font-size:16px;font-weight:700;color:'+gc+'">'+sc+'</span></td>'
+        +'<td>'+rating+'</td><td>'+cbtB+'</td><td>'+toolsB+'</td><td>'+snapB+'</td><td>'+nicB+'</td>'
+        +'<td style="font-size:11px;color:var(--muted)">'+s.issues.join(', ')+'</td></tr>';
+    }).join(''):nd(8);
+}
+
+// ── VM SPRAWL ─────────────────────────────────────────────────────────────────
+function renderSprawl(){
+  var toolsMap={};
+  S.toolsData.forEach(function(t){toolsMap[t.vm]=t.status;});
+  var snapMap={};
+  S.snaps.forEach(function(s){if(!snapMap[s.vm]||s.ageDays>snapMap[s.vm]) snapMap[s.vm]=s.ageDays;});
+
+  var sprawl=[];
+  S.vms.filter(isOff).forEach(function(vm){
+    var score=0, reasons=[];
+    var ts=toolsMap[vm.name]||'';
+    if(ts==='toolsNotInstalled'){score+=30;reasons.push('No Tools installed');}
+    var sa=snapMap[vm.name];
+    if(sa&&sa>90){score+=25;reasons.push('Snapshot '+sa+' days old');}
+    // Age
+    var ageDays=null, ageStr='—';
+    // Use vm.name to find in vms array - we stored dc which doesn't have creation date
+    // We'll approximate using powerOn absence as indicator
+    if(vm.provGiB>500){score+=15;reasons.push((vm.provGiB).toFixed(0)+' GiB provisioned');}
+    if(!vm.cluster||vm.cluster==='—'){score+=5;reasons.push('No cluster assigned');}
+    if(score>0) sprawl.push({vm,score,reasons});
+  });
+
+  // Also add powered-off with high scores
+  sprawl.sort(function(a,b){return b.score-a.score;});
+  var highConf=sprawl.filter(function(s){return s.score>=50;});
+  var watch=sprawl.filter(function(s){return s.score>=25&&s.score<50;});
+  var totalStorTiB=highConf.reduce(function(s,x){return s+x.vm.provGiB/1024;},0);
+  var totalRAMgib=sprawl.reduce(function(s,x){return s+x.vm.vramMB/1024;},0);
+
+  set('sp-crit',highConf.length); set('sp-warn',watch.length);
+  set('sp-stor',totalStorTiB.toFixed(1)+' TiB');
+  set('sp-ram',S.vms.filter(isOff).reduce(function(s,v){return s+v.vramMB/1024;},0).toFixed(0)+' GiB');
+  set('sp-count',sprawl.length+' VMs');
+
+  document.getElementById('t-sprawl').innerHTML=sprawl.length
+    ?sprawl.map(function(s){
+      var conf=s.score>=50?'<span class="badge bdanger">🔴 High</span>':s.score>=25?'<span class="badge bwarn">⚠️ Medium</span>':'<span class="badge binfo">Low</span>';
+      return'<tr><td style="font-weight:700;color:var(--text)">'+s.vm.name+'</td>'
+        +'<td>'+conf+'</td>'
+        +'<td style="font-family:var(--mono);color:'+(s.score>=50?'var(--danger)':'var(--warn)')+'">'+s.score+'</td>'
+        +'<td>'+s.vm.provGiB.toFixed(0)+'</td>'
+        +'<td style="color:var(--warn)">'+(s.vm.vramMB/1024).toFixed(1)+'</td>'
+        +'<td style="color:var(--muted)">—</td>'
+        +'<td style="color:var(--muted)">'+s.vm.cluster+'</td>'
+        +'<td style="font-size:11px;color:var(--muted);max-width:220px;white-space:normal">'+s.reasons.join(' · ')+'</td></tr>';
+    }).join(''):'<tr><td colspan="8" class="empty">✓ No sprawl candidates found</td></tr>';
+}
+
+// ── VM AGE ANALYSIS ───────────────────────────────────────────────────────────
+var chAge=null, chTimeline=null;
+
+function renderVMAge(){
+  var aged=[];
+  S.vms.forEach(function(vm){
+    // We don't have creation date in parsed VMs — use a heuristic from hwver
+    // Actually we need to parse it from raw data; skip for VMs without it
+    aged.push({vm,ageDays:null});
+  });
+
+  // Use hwversion as rough age proxy — provide age analysis from aggregated data
+  // Since creation date isn't in our parsed state, show HW version age distribution
+  var hwMap={};
+  S.vms.forEach(function(v){
+    var hw=parseInt(v.hwver)||0;
+    hwMap[hw]=(hwMap[hw]||0)+1;
+  });
+
+  // HW version to approx year introduced
+  var HW_YEAR={'9':2011,'10':2013,'11':2014,'13':2015,'14':2018,'15':2019,'17':2020,'18':2021,'19':2022,'20':2023};
+  var buckets={'<1yr':0,'1-3yr':0,'3-5yr':0,'>5yr':0};
+  S.vms.forEach(function(v){
+    var hw=v.hwver||'0';
+    var yr=HW_YEAR[hw]||2018;
+    var age=2026-yr;
+    if(age<1) buckets['<1yr']++;
+    else if(age<3) buckets['1-3yr']++;
+    else if(age<5) buckets['3-5yr']++;
+    else buckets['>5yr']++;
+  });
+
+  set('age-5',buckets['>5yr']); set('age-3',buckets['3-5yr']);
+  set('age-1',buckets['1-3yr']); set('age-0',buckets['<1yr']);
+  set('age-count',S.vms.length+' VMs');
+
+  // Age donut
+  var ctx1=document.getElementById('cAge').getContext('2d');
+  if(chAge) chAge.destroy();
+  chAge=new Chart(ctx1,{
+    type:'doughnut',
+    data:{labels:['> 5 Years','3–5 Years','1–3 Years','< 1 Year'],
+      datasets:[{data:[buckets['>5yr'],buckets['3-5yr'],buckets['1-3yr'],buckets['<1yr']],backgroundColor:['#ef4444','#f59e0b','#7c6af7','#00d4aa'],borderWidth:0}]},
+    options:{plugins:{legend:{labels:{color:'#94a3b8',font:{size:11}}}},cutout:'55%'}
+  });
+
+  // Timeline by HW version year
+  var ctx2=document.getElementById('cTimeline').getContext('2d');
+  if(chTimeline) chTimeline.destroy();
+  var sortedHW=Object.entries(hwMap).sort(function(a,b){return parseInt(a[0])-parseInt(b[0]);});
+  chTimeline=new Chart(ctx2,{
+    type:'bar',
+    data:{labels:sortedHW.map(function(e){return'HW v'+e[0]+' (~'+( HW_YEAR[e[0]]||'?')+')'}),
+      datasets:[{data:sortedHW.map(function(e){return e[1];}),backgroundColor:'#7c6af7',borderRadius:4,borderWidth:0}]},
+    options:{plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#64748b',font:{size:9}},grid:{display:false}},y:{ticks:{color:'#64748b'},grid:{color:'#1a1e28'}}}}
+  });
+
+  // Table — oldest by HW version
+  var oldVMs=S.vms.filter(function(v){var hw=parseInt(v.hwver)||14;return hw<=13;}).sort(function(a,b){return parseInt(a.hwver)-parseInt(b.hwver);});
+  document.getElementById('t-vmage').innerHTML=oldVMs.length
+    ?oldVMs.map(function(vm){
+      var hw=parseInt(vm.hwver)||0;
+      var yr=HW_YEAR[vm.hwver]||2018;
+      var age=2026-yr;
+      var rec=hw<=11?'Upgrade HW version — missing security features':hw<=13?'Plan HW version upgrade':'Current — no action needed';
+      var agec=age>=8?'var(--danger)':age>=5?'var(--warn)':'var(--ok)';
+      return'<tr><td style="font-weight:700;color:var(--text)">'+vm.name+'</td>'
+        +'<td style="color:var(--muted);font-size:11px">~'+yr+'</td>'
+        +'<td style="color:'+agec+';font-weight:700">~'+age+' years</td>'
+        +'<td>'+pwBadge(vm.power)+'</td>'
+        +'<td style="font-size:11px">'+vm.os+'</td>'
+        +'<td>'+vm.vcpu+'</td>'
+        +'<td>'+(vm.vramMB/1024).toFixed(1)+'</td>'
+        +'<td style="color:var(--muted)">'+vm.cluster+'</td>'
+        +'<td style="font-size:11px;color:var(--accent)">'+rec+'</td></tr>';
+    }).join(''):'<tr><td colspan="9" class="empty">✓ All VMs on recent hardware versions</td></tr>';
+}
+
+// ── PATCH RENDERALL ───────────────────────────────────────────────────────────
+var _origRenderAll = renderAll;
+renderAll = function(){
+  _origRenderAll();
+  renderExecutive();
+  renderHeatmap();
+  renderScorecard();
+  renderBackup();
+  renderSprawl();
+  renderVMAge();
+};
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
 renderAll();
