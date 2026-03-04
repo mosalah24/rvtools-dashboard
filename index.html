@@ -14,6 +14,38 @@
   --ok:#22c55e;--text:#e2e8f0;--muted:#64748b;
   --mono:'JetBrains Mono',monospace;--sans:'Plus Jakarta Sans',sans-serif;
 }
+body.light {
+  --bg:#f0f4f8;--surface:#ffffff;--surface2:#e8edf3;--border:#d1d9e0;
+  --accent:#007a63;--accent2:#5b4fd4;--warn:#b45309;--danger:#dc2626;
+  --ok:#16a34a;--text:#1e293b;--muted:#64748b;
+}
+/* Theme toggle button */
+.theme-toggle{background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:5px 12px;cursor:pointer;font-size:12px;color:var(--text);display:flex;align-items:center;gap:6px;transition:background .2s,color .2s;white-space:nowrap;}
+.theme-toggle:hover{border-color:var(--accent);}
+.theme-toggle .tog-track{width:28px;height:16px;border-radius:8px;background:var(--border);position:relative;transition:background .25s;flex-shrink:0;}
+.theme-toggle .tog-thumb{width:12px;height:12px;border-radius:50%;background:#fff;position:absolute;top:2px;left:2px;transition:transform .25s,background .25s;box-shadow:0 1px 3px rgba(0,0,0,.3);}
+body.light .theme-toggle .tog-track{background:var(--accent);}
+body.light .theme-toggle .tog-thumb{transform:translateX(12px);}
+/* Light mode specific overrides */
+body.light .logo-icon{filter:brightness(.85);}
+body.light .nav-item.active{background:rgba(0,122,99,.12);color:var(--accent);}
+body.light .nav-item:hover{background:rgba(0,0,0,.05);}
+body.light .btn-ghost{color:var(--text);}
+body.light input,body.light select{background:var(--surface2);color:var(--text);border-color:var(--border);}
+body.light .search{background:var(--surface2);color:var(--text);}
+body.light #searchResults{background:var(--surface);box-shadow:0 12px 40px rgba(0,0,0,.15);}
+body.light .sr-item:hover,body.light .sr-item.sr-active{background:var(--surface2);}
+body.light tbody tr:hover{background:rgba(0,0,0,.03);}
+body.light .empty{color:var(--muted);}
+body.light .rec-note{background:#eef6f4;border-color:rgba(0,122,99,.2);}
+body.light .badge.bok{background:rgba(22,163,74,.12);color:#15803d;}
+body.light .badge.bwarn{background:rgba(180,83,9,.1);color:#b45309;}
+body.light .badge.bdanger{background:rgba(220,38,38,.1);color:#dc2626;}
+body.light .badge.binfo{background:rgba(91,79,212,.1);color:#5b4fd4;}
+body.light .drop-zone{background:rgba(0,122,99,.03);}
+body.light .stat-value.ca{color:var(--ok);}
+body.light .stat-value.cw{color:var(--warn);}
+body.light .stat-value.cd{color:var(--danger);}
 *{box-sizing:border-box;margin:0;padding:0;}
 body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;}
 .app{display:flex;height:100vh;overflow:hidden;}
@@ -200,6 +232,10 @@ tr:hover td{background:rgba(255,255,255,.02);}
     <button class="btn btn-primary" id="loadBtn" onclick="fileInput.click()">＋ Load Files</button>
     <button class="btn btn-ghost" onclick="resetAll()">↺ Reset</button>
     <button class="btn btn-ghost" onclick="exportCurrentTable()">⬇ Export CSV</button>
+    <button class="theme-toggle" onclick="toggleTheme()" id="themeBtn" title="Toggle light / dark mode">
+      <div class="tog-track"><div class="tog-thumb"></div></div>
+      <span id="themeLabel">Light</span>
+    </button>
     <div class="search-wrap">
       <span class="search-icon">🔍</span>
       <input id="globalSearch" class="search" placeholder="Search VMs, hosts, datastores…"
@@ -3860,8 +3896,44 @@ renderAll = function() {
 };
 
 
+
+// ── THEME TOGGLE ────────────────────────────────────────────────────────────
+function toggleTheme() {
+  var isLight = document.body.classList.toggle('light');
+  localStorage.setItem('rvtools-theme', isLight ? 'light' : 'dark');
+  document.getElementById('themeLabel').textContent = isLight ? 'Dark' : 'Light';
+  updateChartTheme(isLight);
+}
+
+function updateChartTheme(isLight) {
+  var gridColor  = isLight ? 'rgba(0,0,0,.07)'  : '#1a1e28';
+  var tickColor  = isLight ? '#64748b'           : '#64748b';
+  var legendColor= isLight ? '#1e293b'           : '#94a3b8';
+  // Update all registered Chart.js instances
+  Object.values(Chart.instances || {}).forEach(function(ch) {
+    if (!ch || !ch.options) return;
+    var sc = ch.options.scales || {};
+    Object.values(sc).forEach(function(axis) {
+      if (axis.ticks) axis.ticks.color = tickColor;
+      if (axis.grid)  axis.grid.color  = gridColor;
+    });
+    var pl = (ch.options.plugins || {});
+    if (pl.legend && pl.legend.labels) pl.legend.labels.color = legendColor;
+    ch.update('none');
+  });
+}
+
+function applyStoredTheme() {
+  var stored = localStorage.getItem('rvtools-theme');
+  if (stored === 'light') {
+    document.body.classList.add('light');
+    document.getElementById('themeLabel').textContent = 'Dark';
+  }
+}
+
 // ── INIT ──────────────────────────────────────────────────────────────────────
 renderAll();
+applyStoredTheme();
 </script>
 </body>
 </html>
